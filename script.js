@@ -7,7 +7,7 @@
 // a page refresh. The sidebar shows that list, like Claude/ChatGPT.
 // ============================================================
 
-const API_KEY = "PASTE_YOUR_GROQ_API_KEY_HERE";
+const API_KEY = "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";
 const API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "llama-3.3-70b-versatile";
 
