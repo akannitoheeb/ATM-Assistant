@@ -96,7 +96,7 @@ async function handleSend(event) {
     console.error(error);
     session.messages.push({
       role: "assistant",
-      content: "⚠️ Something went wrong reaching the AI. Check your API key and internet connection."
+      content: "⚠️ " + error.message
     });
     renderActiveChat();
   } finally {
