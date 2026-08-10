@@ -7,7 +7,7 @@
 // a page refresh. The sidebar shows that list, like Claude/ChatGPT.
 // ============================================================
 
-const API_KEY = "PASTE_YOUR_GEMINI_API_KEY_HERE";
+const API_KEY = "AQ.Ab8RN6LHG7t61FleIALUNIb8D46w2fc8hDT7CVQ9JOkF5NfSyw";
 const API_URL =
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
