@@ -13,7 +13,7 @@
 // STEP 0: Put your free Gemini API key here.
 // Get one at https://aistudio.google.com  (no credit card needed)
 // --------------------------------------------------------------
-const API_KEY = "PASTE_YOUR_GEMINI_API_KEY_HERE";
+const API_KEY = "AQ.Ab8RN6K9bakbsH1cf8JcWtg21nModr4SajAYpQJs60GHy86bVQ";
 
 const API_URL =
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
