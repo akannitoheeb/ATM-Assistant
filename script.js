@@ -7,23 +7,10 @@
 // a page refresh. The sidebar shows that list, like Claude/ChatGPT.
 // ============================================================
 
-const API_KEY = "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";
-const API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = "llama-3.3-70b-versatile";
-
-const SYSTEM_INSTRUCTION = `
-You are ATM Assistant, a helpful general-purpose AI assistant that can discuss
-any topic the user brings up — questions, advice, writing, explanations, etc.
-
-You have particularly deep, practical expertise in email marketing and
-copywriting: subject lines, segmentation, automation flows, deliverability,
-and conversion copy, with an understanding of the Nigerian small-business
-market. When a question touches marketing, lean into that expertise with
-specific, actionable answers rather than generic tips.
-
-For everything else, just be a clear, direct, genuinely useful assistant.
-Keep answers reasonably concise unless the user asks for depth.
-`.trim();
+// Your browser now calls YOUR OWN function, not Groq directly.
+// No API key lives here anymore — it's safe to make this code
+// fully public.
+const API_URL = "/.netlify/functions/chat";
 
 const STORAGE_KEY = "atm_assistant_sessions_v2";
 
@@ -79,11 +66,6 @@ async function handleSend(event) {
   const text = userInput.value.trim();
   if (!text) return;
 
-  if (API_KEY === "PASTE_YOUR_GROQ_API_KEY_HERE") {
-    alert("Add your free Groq API key in script.js first (see the comment at the top of the file).");
-    return;
-  }
-
   // If there's no active session yet, create one now.
   if (activeId === null) {
     const newSession = {
@@ -123,38 +105,28 @@ async function handleSend(event) {
 }
 
 // --------------------------------------------------------------
-// API call — sends the system instruction plus this session's
-// full message history so far, OpenAI-style (Groq uses the same
-// message format as OpenAI: an array of {role, content} objects).
+// API call — sends this session's message history to OUR OWN
+// function (not Groq directly). Our function adds the system
+// instruction and the secret key on the server side.
 // --------------------------------------------------------------
 async function callGroqAPI(messages) {
   const response = await fetch(API_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${API_KEY}`
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: "system", content: SYSTEM_INSTRUCTION },
-        ...messages
-      ]
-    })
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages })
   });
 
+  const data = await response.json();
+
   if (!response.ok) {
-    throw new Error(`API request failed with status ${response.status}`);
+    throw new Error(data.error || `Request failed with status ${response.status}`);
   }
 
-  const data = await response.json();
-  const rawText = data.choices?.[0]?.message?.content;
-
-  if (!rawText) {
+  if (!data.reply) {
     throw new Error("No text returned from the API.");
   }
 
-  return rawText.trim();
+  return data.reply.trim();
 }
 
 // --------------------------------------------------------------
