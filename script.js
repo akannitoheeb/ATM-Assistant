@@ -7,9 +7,9 @@
 // a page refresh. The sidebar shows that list, like Claude/ChatGPT.
 // ============================================================
 
-const API_KEY = "AQ.Ab8RN6LHG7t61FleIALUNIb8D46w2fc8hDT7CVQ9JOkF5NfSyw";
-const API_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+const API_KEY = "PASTE_YOUR_GROQ_API_KEY_HERE";
+const API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL = "llama-3.3-70b-versatile";
 
 const SYSTEM_INSTRUCTION = `
 You are ATM Assistant, a helpful general-purpose AI assistant that can discuss
@@ -25,7 +25,7 @@ For everything else, just be a clear, direct, genuinely useful assistant.
 Keep answers reasonably concise unless the user asks for depth.
 `.trim();
 
-const STORAGE_KEY = "atm_assistant_sessions";
+const STORAGE_KEY = "atm_assistant_sessions_v2";
 
 // --------------------------------------------------------------
 // Element references
@@ -79,8 +79,8 @@ async function handleSend(event) {
   const text = userInput.value.trim();
   if (!text) return;
 
-  if (API_KEY === "PASTE_YOUR_GEMINI_API_KEY_HERE") {
-    alert("Add your free Gemini API key in script.js first (see the comment at the top of the file).");
+  if (API_KEY === "PASTE_YOUR_GROQ_API_KEY_HERE") {
+    alert("Add your free Groq API key in script.js first (see the comment at the top of the file).");
     return;
   }
 
@@ -96,7 +96,7 @@ async function handleSend(event) {
   }
 
   const session = getActiveSession();
-  session.messages.push({ role: "user", parts: [{ text }] });
+  session.messages.push({ role: "user", content: text });
   saveSessions();
   renderSidebar();
   renderActiveChat();
@@ -106,15 +106,15 @@ async function handleSend(event) {
   setLoading(true);
 
   try {
-    const reply = await callGeminiAPI(session.messages);
-    session.messages.push({ role: "model", parts: [{ text: reply }] });
+    const reply = await callGroqAPI(session.messages);
+    session.messages.push({ role: "assistant", content: reply });
     saveSessions();
     renderActiveChat();
   } catch (error) {
     console.error(error);
     session.messages.push({
-      role: "model",
-      parts: [{ text: "⚠️ Something went wrong reaching the AI. Check your API key and internet connection." }]
+      role: "assistant",
+      content: "⚠️ Something went wrong reaching the AI. Check your API key and internet connection."
     });
     renderActiveChat();
   } finally {
@@ -124,15 +124,22 @@ async function handleSend(event) {
 
 // --------------------------------------------------------------
 // API call — sends the system instruction plus this session's
-// full message history so far.
+// full message history so far, OpenAI-style (Groq uses the same
+// message format as OpenAI: an array of {role, content} objects).
 // --------------------------------------------------------------
-async function callGeminiAPI(messages) {
+async function callGroqAPI(messages) {
   const response = await fetch(API_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${API_KEY}`
+    },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-      contents: messages
+      model: MODEL,
+      messages: [
+        { role: "system", content: SYSTEM_INSTRUCTION },
+        ...messages
+      ]
     })
   });
 
@@ -141,7 +148,7 @@ async function callGeminiAPI(messages) {
   }
 
   const data = await response.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const rawText = data.choices?.[0]?.message?.content;
 
   if (!rawText) {
     throw new Error("No text returned from the API.");
@@ -185,7 +192,7 @@ function renderActiveChat() {
 
   session.messages.forEach(msg => {
     const role = msg.role === "user" ? "user" : "assistant";
-    addMessageToDOM(msg.parts[0].text, role);
+    addMessageToDOM(msg.content, role);
   });
 
   chatLog.scrollTop = chatLog.scrollHeight;
