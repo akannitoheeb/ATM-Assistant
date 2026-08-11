@@ -229,6 +229,29 @@ body {
   max-width: 100%;
 }
 
+.message.assistant .bubble p {
+  margin: 0 0 12px 0;
+}
+
+.message.assistant .bubble p:last-child {
+  margin-bottom: 0;
+}
+
+.message.assistant .bubble ol,
+.message.assistant .bubble ul {
+  margin: 0 0 12px 0;
+  padding-left: 22px;
+}
+
+.message.assistant .bubble li {
+  margin-bottom: 4px;
+}
+
+.message.assistant .bubble strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .message.user .bubble {
   background: var(--user-bubble);
   color: var(--text);
