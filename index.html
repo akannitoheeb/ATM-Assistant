@@ -1,1 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ATM Assistant</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
 
+  <div class="app">
+
+    <!-- ===================== SIDEBAR ===================== -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand">
+          <span class="brand-mark">✉</span>
+          <span class="brand-name">ATM</span>
+        </div>
+        <button id="newChatBtn" class="new-chat-btn">
+          <span class="plus">+</span> New chat
+        </button>
+      </div>
+
+      <nav class="chat-history">
+        <div class="history-label">Recent</div>
+        <!-- Past chat entries get inserted here by script.js -->
+        <div id="historyList"></div>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <span class="user-tag">Toheeb · Local</span>
+      </div>
+    </aside>
+
+    <!-- ===================== MAIN AREA ===================== -->
+    <main class="main">
+
+      <!-- Shown only when there's no active conversation yet -->
+      <div id="greetingState" class="greeting-state">
+        <div class="greeting-mark">✉</div>
+        <h1>What can I help with?</h1>
+        <p class="greeting-sub">Ask anything — especially sharp on email marketing.</p>
+      </div>
+
+      <!-- Shown once a conversation starts -->
+      <div id="chatLog" class="chat-log"></div>
+
+      <form id="chatForm" class="chat-input-row">
+        <textarea
+          id="userInput"
+          rows="1"
+          placeholder="Message ATM Assistant…"
+        ></textarea>
+        <button type="submit" id="sendBtn" aria-label="Send">↑</button>
+      </form>
+
+    </main>
+
+  </div>
+
+  <script src="script.js?v=4"></script>
+</body>
+</html>
