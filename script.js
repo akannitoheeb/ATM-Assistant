@@ -175,9 +175,69 @@ function addMessageToDOM(text, kind) {
   wrapper.className = `message ${kind}`;
   const bubble = document.createElement("div");
   bubble.className = "bubble";
-  bubble.textContent = text;
+
+  // User messages stay as plain text (safe, and they don't need formatting).
+  // Assistant messages get run through our small markdown renderer below.
+  if (kind === "assistant") {
+    bubble.innerHTML = renderMarkdown(text);
+  } else {
+    bubble.textContent = text;
+  }
+
   wrapper.appendChild(bubble);
   chatLog.appendChild(wrapper);
+}
+
+// --------------------------------------------------------------
+// A small, purpose-built markdown renderer.
+// Handles just what the AI actually sends us: **bold** text,
+// numbered lists, bullet lists, and paragraph breaks. Not a full
+// markdown library — just enough for clean, readable replies.
+// --------------------------------------------------------------
+function renderMarkdown(text) {
+  // Escape HTML first so the AI's text can never inject real tags —
+  // only the specific markdown patterns below become real HTML.
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // Turn **bold** into <strong>bold</strong>
+  const withBold = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+  // Process line by line so we can group consecutive list items
+  // into a single <ol> or <ul>, instead of one per line.
+  const lines = withBold.split("\n");
+  let html = "";
+  let listType = null; // "ol", "ul", or null
+
+  function closeList() {
+    if (listType) {
+      html += listType === "ol" ? "</ol>" : "</ul>";
+      listType = null;
+    }
+  }
+
+  lines.forEach(line => {
+    const numberedMatch = line.match(/^\s*\d+[\.\)]\s+(.*)/);
+    const bulletMatch = line.match(/^\s*[-*]\s+(.*)/);
+
+    if (numberedMatch) {
+      if (listType !== "ol") { closeList(); html += "<ol>"; listType = "ol"; }
+      html += `<li>${numberedMatch[1]}</li>`;
+    } else if (bulletMatch) {
+      if (listType !== "ul") { closeList(); html += "<ul>"; listType = "ul"; }
+      html += `<li>${bulletMatch[1]}</li>`;
+    } else if (line.trim() === "") {
+      closeList();
+    } else {
+      closeList();
+      html += `<p>${line}</p>`;
+    }
+  });
+  closeList();
+
+  return html;
 }
 
 function setLoading(isLoading) {
