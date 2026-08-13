@@ -136,9 +136,203 @@ body {
   margin-top: 8px;
 }
 
+.settings-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  padding: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.settings-btn:hover {
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.settings-btn .gear {
+  color: var(--gold);
+}
+
 .user-tag {
+  display: block;
   font-size: 12px;
   color: var(--text-soft);
+  padding: 2px 8px;
+}
+
+/* ===================== History item controls ===================== */
+.history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.history-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-item-menu {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  font-size: 15px;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+}
+
+.history-item:hover .history-item-menu {
+  opacity: 1;
+}
+
+.history-item-menu:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* ===================== Settings modal ===================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.modal-header h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.modal-close:hover {
+  color: var(--text);
+}
+
+.modal-body {
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal .field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-soft);
+  margin-bottom: 6px;
+}
+
+.modal select,
+.modal textarea {
+  width: 100%;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 10px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  resize: vertical;
+}
+
+.modal select:focus,
+.modal textarea:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.checkbox-row input {
+  margin-top: 3px;
+  accent-color: var(--gold);
+}
+
+.modal-footer {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.save-btn {
+  width: 100%;
+  background: var(--gold);
+  color: var(--navy-deep, #16202E);
+  border: none;
+  border-radius: 6px;
+  padding: 10px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.save-btn:hover {
+  background: var(--gold-deep);
 }
 
 /* ===================== Main area ===================== */

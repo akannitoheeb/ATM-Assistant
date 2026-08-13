@@ -29,9 +29,48 @@
       </nav>
 
       <div class="sidebar-bottom">
+        <button id="settingsBtn" class="settings-btn">
+          <span class="gear">⚙</span> Settings
+        </button>
         <span class="user-tag">Toheeb · Local</span>
       </div>
     </aside>
+
+    <!-- ===================== SETTINGS MODAL ===================== -->
+    <div id="settingsOverlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button id="closeSettingsBtn" class="modal-close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <label class="field-label" for="toneSelect">Tone</label>
+          <select id="toneSelect">
+            <option value="friendly and warm">Friendly & warm</option>
+            <option value="direct and professional">Direct & professional</option>
+            <option value="playful and energetic">Playful & energetic</option>
+            <option value="premium and understated">Premium & understated</option>
+          </select>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="nigeriaToggle" checked />
+            <span>Emphasize Nigerian market context in marketing answers</span>
+          </label>
+
+          <label class="field-label" for="customInstruction">Extra instructions (optional)</label>
+          <textarea
+            id="customInstruction"
+            rows="3"
+            placeholder="e.g. Keep replies short. Always suggest 3 options, not 5."
+          ></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button id="saveSettingsBtn" class="save-btn">Save</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ===================== MAIN AREA ===================== -->
     <main class="main">
@@ -59,6 +98,6 @@
 
   </div>
 
-  <script src="script.js?v=4"></script>
+  <script src="script.js?v=5"></script>
 </body>
 </html>

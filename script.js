@@ -13,6 +13,7 @@
 const API_URL = "/.netlify/functions/chat";
 
 const STORAGE_KEY = "atm_assistant_sessions_v2";
+const SETTINGS_KEY = "atm_assistant_settings";
 
 // --------------------------------------------------------------
 // Element references
@@ -24,6 +25,70 @@ const userInput = document.getElementById("userInput");
 const sendBtn = document.getElementById("sendBtn");
 const newChatBtn = document.getElementById("newChatBtn");
 const historyList = document.getElementById("historyList");
+
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsOverlay = document.getElementById("settingsOverlay");
+const closeSettingsBtn = document.getElementById("closeSettingsBtn");
+const saveSettingsBtn = document.getElementById("saveSettingsBtn");
+const toneSelect = document.getElementById("toneSelect");
+const nigeriaToggle = document.getElementById("nigeriaToggle");
+const customInstruction = document.getElementById("customInstruction");
+
+// --------------------------------------------------------------
+// Settings state — loaded once, applied to every message sent
+// --------------------------------------------------------------
+let settings = loadSettings();
+applySettingsToForm();
+
+settingsBtn.addEventListener("click", () => {
+  applySettingsToForm();
+  settingsOverlay.classList.remove("hidden");
+});
+
+closeSettingsBtn.addEventListener("click", () => {
+  settingsOverlay.classList.add("hidden");
+});
+
+// Clicking the dark backdrop (outside the modal box) also closes it
+settingsOverlay.addEventListener("click", (event) => {
+  if (event.target === settingsOverlay) {
+    settingsOverlay.classList.add("hidden");
+  }
+});
+
+saveSettingsBtn.addEventListener("click", () => {
+  settings = {
+    tone: toneSelect.value,
+    emphasizeNigeria: nigeriaToggle.checked,
+    customInstruction: customInstruction.value.trim()
+  };
+  saveSettings();
+  settingsOverlay.classList.add("hidden");
+});
+
+function applySettingsToForm() {
+  toneSelect.value = settings.tone;
+  nigeriaToggle.checked = settings.emphasizeNigeria;
+  customInstruction.value = settings.customInstruction;
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // fall through to defaults below
+  }
+  return {
+    tone: "friendly and warm",
+    emphasizeNigeria: true,
+    customInstruction: ""
+  };
+}
+
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
 
 // --------------------------------------------------------------
 // Session state
@@ -113,7 +178,7 @@ async function callGroqAPI(messages) {
   const response = await fetch(API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages })
+    body: JSON.stringify({ messages, settings })
   });
 
   const data = await response.json();
@@ -138,14 +203,54 @@ function renderSidebar() {
   sessions.forEach(session => {
     const item = document.createElement("div");
     item.className = "history-item" + (session.id === activeId ? " active" : "");
-    item.textContent = session.title || "New chat";
-    item.addEventListener("click", () => {
+
+    const label = document.createElement("span");
+    label.className = "history-item-label";
+    label.textContent = session.title || "New chat";
+    label.addEventListener("click", () => {
       activeId = session.id;
       renderSidebar();
       renderActiveChat();
     });
+
+    const menuBtn = document.createElement("button");
+    menuBtn.className = "history-item-menu";
+    menuBtn.textContent = "⋮";
+    menuBtn.setAttribute("aria-label", "Chat options");
+    menuBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handleHistoryMenu(session.id);
+    });
+
+    item.appendChild(label);
+    item.appendChild(menuBtn);
     historyList.appendChild(item);
   });
+}
+
+function handleHistoryMenu(sessionId) {
+  const session = sessions.find(s => s.id === sessionId);
+  if (!session) return;
+
+  const newTitle = prompt("Rename this chat (leave blank to delete it):", session.title);
+
+  // Cancel pressed — do nothing
+  if (newTitle === null) return;
+
+  if (newTitle.trim() === "") {
+    if (confirm("Delete this chat? This can't be undone.")) {
+      sessions = sessions.filter(s => s.id !== sessionId);
+      if (activeId === sessionId) activeId = sessions.length > 0 ? sessions[0].id : null;
+      saveSessions();
+      renderSidebar();
+      renderActiveChat();
+    }
+    return;
+  }
+
+  session.title = newTitle.trim();
+  saveSessions();
+  renderSidebar();
 }
 
 function renderActiveChat() {
