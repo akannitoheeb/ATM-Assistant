@@ -9,19 +9,38 @@
 // everything to Groq, and sends the reply back.
 // ============================================================
 
-const SYSTEM_INSTRUCTION = `
+const BASE_INSTRUCTION = `
 You are ATM Assistant, a helpful general-purpose AI assistant that can discuss
 any topic the user brings up — questions, advice, writing, explanations, etc.
 
 You have particularly deep, practical expertise in email marketing and
 copywriting: subject lines, segmentation, automation flows, deliverability,
-and conversion copy, with an understanding of the Nigerian small-business
-market. When a question touches marketing, lean into that expertise with
-specific, actionable answers rather than generic tips.
+and conversion copy. When a question touches marketing, lean into that
+expertise with specific, actionable answers rather than generic tips.
 
 For everything else, just be a clear, direct, genuinely useful assistant.
 Keep answers reasonably concise unless the user asks for depth.
 `.trim();
+
+// Builds the full system instruction from the base plus whatever
+// the user configured in the Settings panel.
+function buildSystemInstruction(settings = {}) {
+  const parts = [BASE_INSTRUCTION];
+
+  if (settings.tone) {
+    parts.push(`Default tone for your replies: ${settings.tone}.`);
+  }
+
+  if (settings.emphasizeNigeria) {
+    parts.push("When discussing marketing, factor in an understanding of the Nigerian small-business market specifically.");
+  }
+
+  if (settings.customInstruction) {
+    parts.push(`Additional instructions from the user: ${settings.customInstruction}`);
+  }
+
+  return parts.join("\n\n");
+}
 
 exports.handler = async function (event) {
   // Only allow POST requests — anything else gets rejected.
@@ -30,7 +49,7 @@ exports.handler = async function (event) {
   }
 
   try {
-    const { messages } = JSON.parse(event.body);
+    const { messages, settings } = JSON.parse(event.body);
 
     // This reads the secret key from Netlify's environment
     // variables — set in the Netlify dashboard, never in code,
@@ -53,7 +72,7 @@ exports.handler = async function (event) {
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [
-          { role: "system", content: SYSTEM_INSTRUCTION },
+          { role: "system", content: buildSystemInstruction(settings) },
           ...messages
         ]
       })
