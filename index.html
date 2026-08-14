@@ -5,18 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ATM Assistant</title>
   <link rel="stylesheet" href="style.css" />
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 
   <!-- ===================== LOGIN GATE ===================== -->
-  <!-- Shown instead of the app when nobody's logged in yet -->
   <div id="loginGate" class="login-gate">
     <div class="login-box">
       <div class="stamp-mark">✉</div>
       <h1>ATM Assistant</h1>
-      <p>Sign in to save your chats and settings to your account.</p>
-      <button id="loginBtn" class="login-btn">Log in / Sign up</button>
+      <p id="authSubtext">Sign in to save your chats and settings to your account.</p>
+
+      <form id="authForm" class="auth-form">
+        <input type="email" id="authEmail" placeholder="Email" required autocomplete="email" />
+        <input type="password" id="authPassword" placeholder="Password" required autocomplete="current-password" />
+        <button type="submit" id="authSubmitBtn" class="login-btn">Log in</button>
+      </form>
+
+      <p class="auth-toggle">
+        <span id="authToggleText">Don't have an account?</span>
+        <button id="authToggleBtn" class="link-btn" type="button">Sign up</button>
+      </p>
+
+      <p id="authError" class="auth-error hidden"></p>
     </div>
   </div>
 
@@ -119,6 +130,6 @@
 
   </div>
 
-  <script src="script.js?v=7"></script>
+  <script src="script.js?v=8"></script>
 </body>
 </html>
