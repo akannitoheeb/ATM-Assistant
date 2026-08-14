@@ -42,10 +42,20 @@ function buildSystemInstruction(settings = {}) {
   return parts.join("\n\n");
 }
 
-exports.handler = async function (event) {
+exports.handler = async function (event, context) {
   // Only allow POST requests — anything else gets rejected.
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
+  }
+
+  // Require a logged-in user, so random visitors can't burn through
+  // your API quota without an account.
+  const user = context.clientContext && context.clientContext.user;
+  if (!user) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ error: "Please log in to use the assistant." })
+    };
   }
 
   try {
