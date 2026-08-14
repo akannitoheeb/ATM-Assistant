@@ -136,6 +136,90 @@ body {
   margin-top: 8px;
 }
 
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 8px;
+}
+
+.logout-link {
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+
+.logout-link:hover {
+  color: var(--text);
+}
+
+/* ===================== Login gate ===================== */
+.login-gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-main);
+  background-image:
+    radial-gradient(circle at 15% 10%, rgba(255,255,255,0.03), transparent 40%),
+    radial-gradient(circle at 85% 90%, rgba(255,255,255,0.03), transparent 40%);
+  padding: 20px;
+}
+
+.login-gate.hidden {
+  display: none;
+}
+
+.login-box {
+  text-align: center;
+  max-width: 320px;
+}
+
+.stamp-mark {
+  color: var(--gold);
+  font-size: 34px;
+  margin-bottom: 14px;
+}
+
+.login-box h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  margin: 0 0 8px 0;
+  color: var(--text);
+}
+
+.login-box p {
+  color: var(--text-soft);
+  font-size: 14px;
+  margin: 0 0 22px 0;
+}
+
+.login-btn {
+  background: var(--gold);
+  color: var(--navy-deep, #16202E);
+  border: none;
+  border-radius: 8px;
+  padding: 12px 26px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.login-btn:hover {
+  background: var(--gold-deep);
+}
+
+.app.hidden {
+  display: none;
+}
+
 .settings-btn {
   width: 100%;
   display: flex;

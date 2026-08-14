@@ -5,10 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ATM Assistant</title>
   <link rel="stylesheet" href="style.css" />
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 </head>
 <body>
 
-  <div class="app">
+  <!-- ===================== LOGIN GATE ===================== -->
+  <!-- Shown instead of the app when nobody's logged in yet -->
+  <div id="loginGate" class="login-gate">
+    <div class="login-box">
+      <div class="stamp-mark">✉</div>
+      <h1>ATM Assistant</h1>
+      <p>Sign in to save your chats and settings to your account.</p>
+      <button id="loginBtn" class="login-btn">Log in / Sign up</button>
+    </div>
+  </div>
+
+  <div class="app hidden" id="appRoot">
 
     <!-- Only visible on small screens — opens the sidebar -->
     <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open menu">☰</button>
@@ -38,7 +50,10 @@
         <button id="settingsBtn" class="settings-btn">
           <span class="gear">⚙</span> Settings
         </button>
-        <span class="user-tag">Toheeb · Local</span>
+        <div class="account-row">
+          <span id="userEmail" class="user-tag">…</span>
+          <button id="logoutBtn" class="logout-link">Log out</button>
+        </div>
       </div>
     </aside>
 
@@ -104,6 +119,6 @@
 
   </div>
 
-  <script src="script.js?v=6"></script>
+  <script src="script.js?v=7"></script>
 </body>
 </html>
