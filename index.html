@@ -1,1 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ATM Assistant</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- TEMPORARY debug console --> 
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script> 
+  <script>eruda.init();</script>
+</head>
+<body>
 
+  <!-- ===================== LOGIN GATE ===================== -->
+  <div id="loginGate" class="login-gate">
+    <div class="login-box">
+      <div class="stamp-mark">✉</div>
+      <h1>ATM Assistant</h1>
+      <p id="authSubtext">Sign in to save your chats and settings to your account.</p>
+
+      <form id="authForm" class="auth-form">
+        <input type="email" id="authEmail" placeholder="Email" required autocomplete="email" />
+        <input type="password" id="authPassword" placeholder="Password" required autocomplete="current-password" />
+        <button type="submit" id="authSubmitBtn" class="login-btn">Log in</button>
+      </form>
+
+      <p class="auth-toggle">
+        <span id="authToggleText">Don't have an account?</span>
+        <button id="authToggleBtn" class="link-btn" type="button">Sign up</button>
+      </p>
+
+      <p id="authError" class="auth-error hidden"></p>
+    </div>
+  </div>
+
+  <div class="app hidden" id="appRoot">
+
+    <!-- Only visible on small screens — opens the sidebar -->
+    <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open menu">☰</button>
+
+    <!-- Only visible on small screens when sidebar is open — tap to close -->
+    <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
+
+    <!-- ===================== SIDEBAR ===================== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="brand">
+          <span class="brand-mark">✉</span>
+          <span class="brand-name">ATM</span>
+        </div>
+        <button id="newChatBtn" class="new-chat-btn">
+          <span class="plus">+</span> New chat
+        </button>
+      </div>
+
+      <nav class="chat-history">
+        <div class="history-label">Recent</div>
+        <!-- Past chat entries get inserted here by script.js -->
+        <div id="historyList"></div>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <button id="settingsBtn" class="settings-btn">
+          <span class="gear">⚙</span> Settings
+        </button>
+        <div class="account-row">
+          <span id="userEmail" class="user-tag">…</span>
+          <button id="logoutBtn" class="logout-link">Log out</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===================== SETTINGS MODAL ===================== -->
+    <div id="settingsOverlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button id="closeSettingsBtn" class="modal-close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <label class="field-label" for="toneSelect">Tone</label>
+          <select id="toneSelect">
+            <option value="friendly and warm">Friendly & warm</option>
+            <option value="direct and professional">Direct & professional</option>
+            <option value="playful and energetic">Playful & energetic</option>
+            <option value="premium and understated">Premium & understated</option>
+          </select>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="nigeriaToggle" checked />
+            <span>Emphasize Nigerian market context in marketing answers</span>
+          </label>
+
+          <label class="field-label" for="customInstruction">Extra instructions (optional)</label>
+          <textarea
+            id="customInstruction"
+            rows="3"
+            placeholder="e.g. Keep replies short. Always suggest 3 options, not 5."
+          ></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button id="saveSettingsBtn" class="save-btn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== MAIN AREA ===================== -->
+    <main class="main">
+
+      <!-- Shown only when there's no active conversation yet -->
+      <div id="greetingState" class="greeting-state">
+        <div class="greeting-mark">✉</div>
+        <h1>What can I help with?</h1>
+        <p class="greeting-sub">Ask anything — especially sharp on email marketing.</p>
+      </div>
+
+      <!-- Shown once a conversation starts -->
+      <div id="chatLog" class="chat-log"></div>
+
+      <form id="chatForm" class="chat-input-row"
+        <textarea
+          id="userInput"
+          rows="1"
+          placeholder="Message ATM Assistant…"
+        ></textarea>
+        <button type="submit" id="sendBtn" aria-label="Send">↑</button>
+      </form>k
+
+    </main>
+
+  </div>
+
+  <script src="script.js?v=8"></script>
+</body>
+</html>
