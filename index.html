@@ -10,8 +10,14 @@
 
   <div class="app">
 
+    <!-- Only visible on small screens — opens the sidebar -->
+    <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open menu">☰</button>
+
+    <!-- Only visible on small screens when sidebar is open — tap to close -->
+    <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
+
     <!-- ===================== SIDEBAR ===================== -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-top">
         <div class="brand">
           <span class="brand-mark">✉</span>
@@ -98,6 +104,6 @@
 
   </div>
 
-  <script src="script.js?v=5"></script>
+  <script src="script.js?v=6"></script>
 </body>
 </html>

@@ -25,6 +25,9 @@ const userInput = document.getElementById("userInput");
 const sendBtn = document.getElementById("sendBtn");
 const newChatBtn = document.getElementById("newChatBtn");
 const historyList = document.getElementById("historyList");
+const sidebar = document.getElementById("sidebar");
+const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
 const settingsBtn = document.getElementById("settingsBtn");
 const settingsOverlay = document.getElementById("settingsOverlay");
@@ -102,6 +105,24 @@ renderSidebar();
 renderActiveChat();
 
 // --------------------------------------------------------------
+// Mobile sidebar toggle (menu button + tap-outside-to-close)
+// On desktop these elements exist but stay invisible via CSS,
+// so this code is harmless there — it just never gets triggered.
+// --------------------------------------------------------------
+mobileMenuBtn.addEventListener("click", openSidebar);
+sidebarBackdrop.addEventListener("click", closeSidebar);
+
+function openSidebar() {
+  sidebar.classList.add("open");
+  sidebarBackdrop.classList.remove("hidden");
+}
+
+function closeSidebar() {
+  sidebar.classList.remove("open");
+  sidebarBackdrop.classList.add("hidden");
+}
+
+// --------------------------------------------------------------
 // New chat
 // --------------------------------------------------------------
 newChatBtn.addEventListener("click", () => {
@@ -109,6 +130,7 @@ newChatBtn.addEventListener("click", () => {
   renderSidebar();
   renderActiveChat();
   userInput.focus();
+  closeSidebar();
 });
 
 // --------------------------------------------------------------
@@ -211,6 +233,7 @@ function renderSidebar() {
       activeId = session.id;
       renderSidebar();
       renderActiveChat();
+      closeSidebar();
     });
 
     const menuBtn = document.createElement("button");

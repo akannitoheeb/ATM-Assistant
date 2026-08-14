@@ -528,16 +528,92 @@ body {
 }
 
 /* ===================== Mobile ===================== */
+/* ===================== Mobile ===================== */
+
+/* Hidden on desktop — only shown inside the mobile media query below */
+.mobile-menu-btn {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 720px) {
   .sidebar {
     position: fixed;
     left: 0;
     top: 0;
     bottom: 0;
+    width: 78vw;
+    max-width: 280px;
     transform: translateX(-100%);
-    transition: transform 0.2s ease;
-    z-index: 20;
+    transition: transform 0.22s ease;
+    z-index: 30;
   }
-  .greeting-state h1 { font-size: 24px; }
-  .chat-input-row { width: calc(100% - 24px); }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Dark backdrop behind the open sidebar — tapping it closes the menu */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 25;
+  }
+
+  .sidebar-backdrop.hidden {
+    display: none;
+  }
+
+  /* Small top bar with a menu button, since the sidebar is hidden by default */
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 18px;
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 15;
+    cursor: pointer;
+  }
+
+  .main {
+    padding-top: 58px;
+  }
+
+  .greeting-state h1 { font-size: 22px; }
+  .greeting-sub { font-size: 13px; padding: 0 12px; }
+
+  .chat-log { padding: 20px 14px 12px 14px; }
+  .bubble { max-width: 88%; font-size: 14.5px; }
+
+  .chat-input-row {
+    width: calc(100% - 24px);
+    padding: 8px 8px 8px 14px;
+  }
+
+  /* Bigger tap targets throughout on touch screens */
+  .history-item { padding: 10px; }
+  .history-item-menu {
+    opacity: 1; /* always visible on mobile — no hover state to reveal it */
+    font-size: 18px;
+    padding: 6px 10px;
+  }
+  .new-chat-btn { padding: 11px 12px; }
+  .settings-btn { padding: 10px; }
+
+  #sendBtn { width: 38px; height: 38px; }
+
+  .modal { max-width: 100%; margin: 0 8px; }
 }
