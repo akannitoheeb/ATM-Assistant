@@ -60,7 +60,7 @@ function defaultSettings() {
 const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvdXZjdnJuc2VnemVjcWRrb2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDAxOTEsImV4cCI6MjEwMjMxNjE5MX0.fnkm94U5c-gbdDMrBvVoZ4ewyEUcOlRY7TJkqkEQS1Q";
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const authForm = document.getElementById("authForm");
 const authEmail = document.getElementById("authEmail");
@@ -104,8 +104,8 @@ authForm.addEventListener("submit", async (event) => {
   try {
     const { error } =
       authMode === "login"
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
+        ? await supabaseClient.auth.signInWithPassword({ email, password })
+        : await supabaseClient.auth.signUp({ email, password });
 
     if (error) throw error;
     // On success, onAuthStateChange (below) handles showing the app.
@@ -117,11 +117,11 @@ authForm.addEventListener("submit", async (event) => {
   }
 });
 
-logoutBtn.addEventListener("click", () => supabase.auth.signOut());
+logoutBtn.addEventListener("click", () => supabaseClient.auth.signOut());
 
 // Fires on initial page load (restoring a saved session) AND
 // whenever the user logs in or out — one place to react to both.
-supabase.auth.onAuthStateChange((event, session) => {
+supabaseClient.auth.onAuthStateChange((event, session) => {
   if (session && session.user) {
     onLogin(session.user);
   } else {
@@ -150,7 +150,7 @@ function showLoginGate() {
 // Attaches the logged-in user's access token to a request, so our
 // chat function knows who's asking.
 async function getAuthHeaders() {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await supabaseClient.auth.getSession();
   const token = data.session?.access_token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -162,8 +162,8 @@ async function getAuthHeaders() {
 // ================================================================
 async function loadUserData() {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data, error } = await supabaseClient
       .from("user_data")
       .select("sessions, settings")
       .eq("user_id", user.id)
@@ -182,8 +182,8 @@ async function loadUserData() {
 
 async function saveUserData() {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("user_data").upsert({
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { error } = await supabaseClient.from("user_data").upsert({
       user_id: user.id,
       sessions,
       settings,
