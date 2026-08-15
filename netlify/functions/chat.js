@@ -144,10 +144,18 @@ exports.handler = async function (event) {
   // your API quota without an account.
   const authHeader = event.headers.authorization || event.headers.Authorization;
   const user = await verifySupabaseToken(authHeader);
-  if (!user) {
+    if (!user) {
     return {
       statusCode: 401,
       body: JSON.stringify({ error: "Please log in to use the assistant." })
+    };
+  }
+
+  const usage = await checkAndIncrementUsage(user.id);
+  if (usage.blocked) {
+    return {
+      statusCode: 429,
+      body: JSON.stringify({ error: `You've reached today's limit of ${DAILY_MESSAGE_LIMIT} messages. Resets at midnight.` })
     };
   }
 
