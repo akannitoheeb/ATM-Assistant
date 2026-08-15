@@ -6,8 +6,10 @@
   <title>ATM Assistant</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <!-- TEMPORARY debug console --> 
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script> 
+
+  <!-- TEMPORARY — an on-screen developer console so we can see real
+       errors on your phone. Safe to remove once we're done debugging. -->
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
   <script>eruda.init();</script>
 </head>
 <body>
@@ -120,19 +122,19 @@
       <!-- Shown once a conversation starts -->
       <div id="chatLog" class="chat-log"></div>
 
-      <form id="chatForm" class="chat-input-row"
+      <form id="chatForm" class="chat-input-row">
         <textarea
           id="userInput"
           rows="1"
           placeholder="Message ATM Assistant…"
         ></textarea>
         <button type="submit" id="sendBtn" aria-label="Send">↑</button>
-      </form>k
+      </form>
 
     </main>
 
   </div>
 
-  <script src="script.js?v=8"></script>
+  <script src="script.js?v=9"></script>
 </body>
 </html>
