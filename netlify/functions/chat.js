@@ -80,8 +80,61 @@ async function verifySupabaseToken(authHeader) {
   if (!response.ok) return null;
   return response.json();
 }
+const DAILY_MESSAGE_LIMIT = 25;
+
+// Checks if this user is still under today's message limit.
+// If they are, increments their count and allows the request.
+// If not, returns blocked: true.
+async function checkAndIncrementUsage(userId) {
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  const today = new Date().toISOString().slice(0, 10); // "2026-08-15"
+
+  const headers = {
+    "Content-Type": "application/json",
+    "apikey": serviceKey,
+    "Authorization": `Bearer ${serviceKey}`,
+    "Prefer": "return=representation"
+  };
+
+  const getRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/usage_limits?user_id=eq.${userId}&select=*`,
+    { headers }
+  );
+  const rows = await getRes.json();
+  const row = rows[0];
+
+  if (!row) {
+    await fetch(`${SUPABASE_URL}/rest/v1/usage_limits`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ user_id: userId, message_count: 1, reset_date: today })
+    });
+    return { blocked: false };
+  }
+
+  if (row.reset_date !== today) {
+    await fetch(`${SUPABASE_URL}/rest/v1/usage_limits?user_id=eq.${userId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ message_count: 1, reset_date: today })
+    });
+    return { blocked: false };
+  }
+
+  if (row.message_count >= DAILY_MESSAGE_LIMIT) {
+    return { blocked: true };
+  }
+
+  await fetch(`${SUPABASE_URL}/rest/v1/usage_limits?user_id=eq.${userId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ message_count: row.message_count + 1 })
+  });
+  return { blocked: false };
+}
 
 exports.handler = async function (event) {
+
   // Only allow POST requests — anything else gets rejected.
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
