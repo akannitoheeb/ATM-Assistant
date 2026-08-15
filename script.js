@@ -21,6 +21,9 @@ const chatLog = document.getElementById("chatLog");
 const chatForm = document.getElementById("chatForm");
 const userInput = document.getElementById("userInput");
 const sendBtn = document.getElementById("sendBtn");
+const attachBtn = document.getElementById("attachBtn");
+const fileInput = document.getElementById("fileInput");
+const attachmentPreview = document.getElementById("attachmentPreview");
 const newChatBtn = document.getElementById("newChatBtn");
 const historyList = document.getElementById("historyList");
 const sidebar = document.getElementById("sidebar");
@@ -57,8 +60,8 @@ function defaultSettings() {
 // database's Row Level Security rules are what actually protect
 // everyone's data, not secrecy of this key.
 // ================================================================
-const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvdXZjdnJuc2VnemVjcWRrb2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDAxOTEsImV4cCI6MjEwMjMxNjE5MX0.fnkm94U5c-gbdDMrBvVoZ4ewyEUcOlRY7TJkqkEQS1Q";
+const SUPABASE_URL = "PASTE_YOUR_SUPABASE_PROJECT_URL_HERE";
+const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -257,6 +260,85 @@ newChatBtn.addEventListener("click", () => {
 });
 
 // --------------------------------------------------------------
+// File attachments (images and plain text files)
+// --------------------------------------------------------------
+let pendingAttachment = null; // { kind: "image"|"text", name, data }
+
+attachBtn.addEventListener("click", () => fileInput.click());
+
+fileInput.addEventListener("change", async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  try {
+    if (file.type.startsWith("image/")) {
+      const dataUrl = await readFileAsDataURL(file);
+      pendingAttachment = { kind: "image", name: file.name, data: dataUrl };
+    } else {
+      // Treat anything else as plain text — .txt, .md, .csv, etc.
+      // (PDFs and Word docs aren't supported yet — text files only for now.)
+      const text = await readFileAsText(file);
+      pendingAttachment = { kind: "text", name: file.name, data: text };
+    }
+    renderAttachmentPreview();
+  } catch (error) {
+    console.error("Failed to read file:", error);
+    alert("Couldn't read that file. Try an image or a plain text file.");
+  }
+
+  fileInput.value = ""; // allows attaching the same file again later
+});
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+function renderAttachmentPreview() {
+  attachmentPreview.innerHTML = "";
+
+  if (!pendingAttachment) {
+    attachmentPreview.classList.add("hidden");
+    return;
+  }
+
+  attachmentPreview.classList.remove("hidden");
+
+  if (pendingAttachment.kind === "image") {
+    const img = document.createElement("img");
+    img.src = pendingAttachment.data;
+    attachmentPreview.appendChild(img);
+  } else {
+    const chip = document.createElement("div");
+    chip.className = "attachment-chip";
+    chip.textContent = "📄 " + pendingAttachment.name;
+    attachmentPreview.appendChild(chip);
+  }
+
+  const removeBtn = document.createElement("button");
+  removeBtn.className = "attachment-remove";
+  removeBtn.textContent = "✕";
+  removeBtn.addEventListener("click", () => {
+    pendingAttachment = null;
+    renderAttachmentPreview();
+  });
+  attachmentPreview.appendChild(removeBtn);
+}
+
+// --------------------------------------------------------------
 // Sending a message
 // --------------------------------------------------------------
 chatForm.addEventListener("submit", handleSend);
@@ -274,25 +356,46 @@ async function handleSend(event) {
   event.preventDefault();
 
   const text = userInput.value.trim();
-  if (!text) return;
+  if (!text && !pendingAttachment) return;
 
   if (activeId === null) {
     const newSession = {
       id: Date.now().toString(),
-      title: text.slice(0, 40),
+      title: (text || pendingAttachment.name).slice(0, 40),
       messages: []
     };
     sessions.unshift(newSession);
     activeId = newSession.id;
   }
 
+  // Build the message content. Plain string for text-only messages
+  // (keeps things simple/compact) — an array of parts only when
+  // there's an image or file attached, which is the format Groq's
+  // vision model expects.
+  let content = text;
+
+  if (pendingAttachment) {
+    if (pendingAttachment.kind === "image") {
+      content = [
+        { type: "text", text: text || "What's in this image?" },
+        { type: "image_url", image_url: { url: pendingAttachment.data } }
+      ];
+    } else {
+      // Text file — just fold its contents into the message text,
+      // no vision model needed for this.
+      content = `${text}\n\n[Attached file: ${pendingAttachment.name}]\n${pendingAttachment.data}`;
+    }
+  }
+
   const session = getActiveSession();
-  session.messages.push({ role: "user", content: text });
+  session.messages.push({ role: "user", content });
   saveUserData();
   renderSidebar();
   renderActiveChat();
 
   userInput.value = "";
+  pendingAttachment = null;
+  renderAttachmentPreview();
   autoGrow();
   setLoading(true);
 
@@ -419,20 +522,71 @@ function renderActiveChat() {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-function addMessageToDOM(text, kind) {
+// content is either a plain string, or an array of parts
+// ({type:"text"} / {type:"image_url"}) when a file was attached.
+function addMessageToDOM(content, kind) {
+  const textPart = Array.isArray(content)
+    ? (content.find(p => p.type === "text")?.text || "")
+    : content;
+  const imagePart = Array.isArray(content)
+    ? content.find(p => p.type === "image_url")
+    : null;
+
   const wrapper = document.createElement("div");
   wrapper.className = `message ${kind}`;
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = kind === "assistant" ? "✉" : getUserInitial();
+
+  const body = document.createElement("div");
+  body.className = "message-body";
+
+  if (imagePart) {
+    const img = document.createElement("img");
+    img.className = "message-image";
+    img.src = imagePart.image_url.url;
+    body.appendChild(img);
+  }
+
   const bubble = document.createElement("div");
   bubble.className = "bubble";
 
   if (kind === "assistant") {
-    bubble.innerHTML = renderMarkdown(text);
+    bubble.innerHTML = renderMarkdown(textPart);
   } else {
-    bubble.textContent = text;
+    bubble.textContent = textPart;
+  }
+  body.appendChild(bubble);
+
+  // Copy button under assistant replies, matching the kind of
+  // message-action row you'd see in other AI chat interfaces.
+  if (kind === "assistant" && textPart) {
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "action-btn";
+    copyBtn.textContent = "Copy";
+    copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(textPart);
+      copyBtn.textContent = "Copied";
+      setTimeout(() => { copyBtn.textContent = "Copy"; }, 1200);
+    });
+
+    actions.appendChild(copyBtn);
+    body.appendChild(actions);
   }
 
-  wrapper.appendChild(bubble);
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(body);
   chatLog.appendChild(wrapper);
+}
+
+// Uses the first letter of the logged-in user's email for their avatar.
+function getUserInitial() {
+  const email = userEmail.textContent || "";
+  return email.charAt(0).toUpperCase() || "U";
 }
 
 // --------------------------------------------------------------

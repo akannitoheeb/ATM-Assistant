@@ -123,11 +123,16 @@
       <div id="chatLog" class="chat-log"></div>
 
       <form id="chatForm" class="chat-input-row">
-        <textarea
-          id="userInput"
-          rows="1"
-          placeholder="Message ATM Assistant…"
-        ></textarea>
+        <button type="button" id="attachBtn" class="attach-btn" aria-label="Attach file">+</button>
+        <input type="file" id="fileInput" accept="image/*,.txt,.md,.csv" hidden />
+        <div class="input-stack">
+          <div id="attachmentPreview" class="attachment-preview hidden"></div>
+          <textarea
+            id="userInput"
+            rows="1"
+            placeholder="Message ATM Assistant…"
+          ></textarea>
+        </div>
         <button type="submit" id="sendBtn" aria-label="Send">↑</button>
       </form>
 
@@ -135,6 +140,6 @@
 
   </div>
 
-  <script src="script.js?v=9"></script>
+  <script src="script.js?v=10"></script>
 </body>
 </html>
