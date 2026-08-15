@@ -144,7 +144,7 @@ exports.handler = async function (event) {
   // your API quota without an account.
   const authHeader = event.headers.authorization || event.headers.Authorization;
   const user = await verifySupabaseToken(authHeader);
-    if (!user) {
+  if (!user) {
     return {
       statusCode: 401,
       body: JSON.stringify({ error: "Please log in to use the assistant." })
