@@ -6,7 +6,7 @@
 // device you log into. Login/signup is also handled by Supabase.
 // ============================================================
 
-const CHAT_API_URL = "/.api/chat";
+const CHAT_API_URL = "/api/chat";
 
 // --------------------------------------------------------------
 // Element references
