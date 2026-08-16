@@ -17,6 +17,10 @@ const guestBlock = document.getElementById("guestBlock");
 const accountBlock = document.getElementById("accountBlock");
 const openAuthBtn = document.getElementById("openAuthBtn");
 const logoutBtn = document.getElementById("logoutBtn");
+const upgradeBtn = document.getElementById("upgradeBtn");
+const upgradeOverlay = document.getElementById("upgradeOverlay");
+const closeUpgradeBtn = document.getElementById("closeUpgradeBtn");
+const upgradeError = document.getElementById("upgradeError");
 const userEmail = document.getElementById("userEmail");
 const userAvatarImg = document.getElementById("userAvatarImg");
 const userAvatarInitial = document.getElementById("userAvatarInitial");
@@ -173,6 +177,7 @@ authForm.addEventListener("submit", async (event) => {
     authError.textContent = friendlyAuthError(error.message);
     authError.classList.remove("hidden");
     authForm.classList.add("shake");
+    upgradeBtn.classList.remove("hidden");
     setTimeout(() => authForm.classList.remove("shake"), 400);
   } finally {
     authSubmitBtn.disabled = false;
@@ -268,6 +273,7 @@ function showGuestMode() {
   isGuest = true;
   accountBlock.classList.add("hidden");
   guestBlock.classList.remove("hidden");
+  upgradeBtn.classList.add("hidden");
 
   sessions = [];
   settings = defaultSettings();
@@ -276,6 +282,49 @@ function showGuestMode() {
   renderSidebar();
   renderActiveChat();
 }
+
+// --------------------------------------------------------------
+// Upgrade to Pro
+// --------------------------------------------------------------
+upgradeBtn.addEventListener("click", () => {
+  upgradeError.classList.add("hidden");
+  upgradeOverlay.classList.remove("hidden");
+});
+
+closeUpgradeBtn.addEventListener("click", () => {
+  upgradeOverlay.classList.add("hidden");
+});
+
+upgradeOverlay.addEventListener("click", (event) => {
+  if (event.target === upgradeOverlay) upgradeOverlay.classList.add("hidden");
+});
+
+document.querySelectorAll(".currency-btn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    upgradeError.classList.add("hidden");
+    document.querySelectorAll(".currency-btn").forEach((b) => (b.disabled = true));
+
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch("/api/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ currency: btn.dataset.currency })
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.link) {
+        throw new Error(data.error || "Could not start payment.");
+      }
+
+      window.location.href = data.link;
+    } catch (error) {
+      upgradeError.textContent = error.message;
+      upgradeError.classList.remove("hidden");
+      document.querySelectorAll(".currency-btn").forEach((b) => (b.disabled = false));
+    }
+  });
+});
 
 // Attaches the logged-in user's access token to a request, so our
 // chat function knows who's asking. Guests send no auth header at all.
