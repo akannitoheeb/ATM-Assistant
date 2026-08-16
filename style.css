@@ -41,7 +41,9 @@ body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  padding: 16px 12px;
+  /* extra bottom padding respects the iPhone home-indicator / Safari toolbar
+     so "Log out" never sits underneath it */
+  padding: 16px 12px calc(16px + env(safe-area-inset-bottom)) 12px;
 }
 
 .sidebar-top {
@@ -168,9 +170,16 @@ body {
   justify-content: center;
   background: var(--bg-main);
   background-image:
-    radial-gradient(circle at 15% 10%, rgba(255,255,255,0.03), transparent 40%),
-    radial-gradient(circle at 85% 90%, rgba(255,255,255,0.03), transparent 40%);
+    radial-gradient(circle at 15% 10%, rgba(201,150,46,0.09), transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(201,150,46,0.07), transparent 45%);
+  background-size: 180% 180%;
+  animation: gradientDrift 14s ease-in-out infinite;
   padding: 20px;
+}
+
+@keyframes gradientDrift {
+  0%, 100% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
 }
 
 .login-gate.hidden {
@@ -180,12 +189,25 @@ body {
 .login-box {
   text-align: center;
   max-width: 320px;
+  animation: loginFadeUp 0.6s ease both;
+}
+
+@keyframes loginFadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .stamp-mark {
   color: var(--gold);
   font-size: 34px;
   margin-bottom: 14px;
+  display: inline-block;
+  animation: floatMark 3s ease-in-out infinite;
+}
+
+@keyframes floatMark {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
 
 .login-box h1 {
@@ -213,10 +235,15 @@ body {
   font-size: 15px;
   cursor: pointer;
   width: 100%;
+  transition: background 0.15s ease, transform 0.1s ease;
 }
 
 .login-btn:hover {
   background: var(--gold-deep);
+}
+
+.login-btn:active {
+  transform: scale(0.98);
 }
 
 .auth-form {
@@ -239,6 +266,45 @@ body {
 .auth-form input:focus {
   outline: 2px solid var(--gold);
   outline-offset: 1px;
+}
+
+/* Password field with eye-toggle button */
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  padding-right: 42px;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 6px 8px;
+  line-height: 1;
+}
+
+.toggle-password:hover {
+  color: var(--gold);
+}
+
+/* Shake feedback when login/signup fails */
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+.auth-form.shake {
+  animation: shake 0.4s ease;
 }
 
 .auth-toggle {
@@ -803,7 +869,6 @@ body {
 }
 
 /* ===================== Mobile ===================== */
-/* ===================== Mobile ===================== */
 
 /* Hidden on desktop — only shown inside the mobile media query below */
 .mobile-menu-btn {
@@ -857,7 +922,7 @@ body {
     color: var(--text);
     font-size: 18px;
     position: fixed;
-    top: 14px;
+    top: calc(14px + env(safe-area-inset-top));
     left: 14px;
     z-index: 15;
     cursor: pointer;
@@ -876,6 +941,7 @@ body {
   .chat-input-row {
     width: calc(100% - 24px);
     padding: 8px 8px 8px 14px;
+    margin-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 
   /* Bigger tap targets throughout on touch screens */
