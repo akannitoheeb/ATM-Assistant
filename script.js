@@ -183,6 +183,17 @@ function notifyBrevoSignup(email, name) {
 async function onLogin(user) {
   const fullName = user.user_metadata?.full_name || user.user_metadata?.name || "";
   userEmail.textContent = fullName ? `${fullName} · ${user.email}` : user.email;
+  
+  const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || "";
+  if (avatarUrl) {
+    userAvatarImg.src = avatarUrl;
+    userAvatarImg.classList.remove("hidden");
+    userAvatarInitial.classList.add("hidden");
+  } else {
+    userAvatarImg.classList.add("hidden");
+    userAvatarInitial.classList.remove("hidden");
+    userAvatarInitial.textContent = (fullName || user.email).charAt(0).toUpperCase();
+  }
 
   loginGate.classList.add("hidden");
   appRoot.classList.remove("hidden");
