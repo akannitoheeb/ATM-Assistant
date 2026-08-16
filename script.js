@@ -69,6 +69,7 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 const authForm = document.getElementById("authForm");
 const authEmail = document.getElementById("authEmail");
 const authPassword = document.getElementById("authPassword");
+const googleAuthBtn = document.getElementById("googleAuthBtn");
 const togglePasswordBtn = document.getElementById("togglePasswordBtn");
 const authSubmitBtn = document.getElementById("authSubmitBtn");
 const authToggleBtn = document.getElementById("authToggleBtn");
@@ -125,6 +126,20 @@ authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   authError.classList.add("hidden");
   authSubmitBtn.disabled = true;
+
+googleAuthBtn.addEventListener("click", async () => {
+  authError.classList.add("hidden");
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.origin }
+  });
+  if (error) {
+    authError.textContent = friendlyAuthError(error.message);
+    authError.classList.remove("hidden");
+  }
+  // On success, the page redirects to Google then back — onAuthStateChange
+  // below picks it up automatically once the user returns.
+});
 
   const email = authEmail.value.trim();
   const password = authPassword.value;
