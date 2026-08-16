@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://assistant.toheebakanni.name.ng/sitemap.xml
