@@ -9,7 +9,8 @@
 //   3. Global guest daily cap — safety net independent of per-IP
 //      tracking, in case someone rotates IPs
 //   4. Per-IP guest limit (1/day) — existing
-//   5. Per-user logged-in limit (25/day) — existing
+//   5. Per-user limit — 25/day free, 200/day Pro (checked via the
+//      subscriptions table)
 // ============================================================
 
 const TEXT_MODEL = "openai/gpt-oss-120b";
@@ -91,7 +92,8 @@ async function verifySupabaseToken(authHeader) {
   return response.json();
 }
 
-const DAILY_MESSAGE_LIMIT = 25;
+const FREE_DAILY_LIMIT = 25;
+const PRO_DAILY_LIMIT = 200;
 const GUEST_DAILY_LIMIT = 1;
 
 function supabaseHeaders() {
@@ -104,7 +106,28 @@ function supabaseHeaders() {
   };
 }
 
-async function checkAndIncrementUsage(userId) {
+// Checks whether this user has an active, unexpired Pro subscription.
+async function getUserPlanLimit(userId) {
+  const headers = supabaseHeaders();
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&select=*`,
+    { headers }
+  );
+  const rows = await res.json();
+  const sub = rows[0];
+
+  const isActivePro =
+    sub &&
+    sub.plan === "pro" &&
+    sub.status === "active" &&
+    sub.current_period_end &&
+    new Date(sub.current_period_end) > new Date();
+
+  return isActivePro ? PRO_DAILY_LIMIT : FREE_DAILY_LIMIT;
+}
+
+async function checkAndIncrementUsage(userId, limit) {
   const today = new Date().toISOString().slice(0, 10);
   const headers = supabaseHeaders();
 
@@ -133,7 +156,7 @@ async function checkAndIncrementUsage(userId) {
     return { blocked: false };
   }
 
-  if (row.message_count >= DAILY_MESSAGE_LIMIT) {
+  if (row.message_count >= limit) {
     return { blocked: true };
   }
 
@@ -145,9 +168,6 @@ async function checkAndIncrementUsage(userId) {
   return { blocked: false };
 }
 
-// Generic day-keyed counter against ip_usage_limits, keyed by whatever
-// string you pass in — a real IP for per-visitor tracking, or a fixed
-// reserved key (e.g. "__global_guest_cap__") for a sitewide total.
 async function checkAndIncrementKeyedUsage(key, limit) {
   const today = new Date().toISOString().slice(0, 10);
   const headers = supabaseHeaders();
@@ -201,9 +221,6 @@ module.exports = async function (req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  // --- Layer 1: origin lock ---
-  // Blocks anyone calling this endpoint from outside our own page
-  // (e.g. a copied script, another site, a bare curl request).
   const origin = req.headers.origin;
   if (origin !== ALLOWED_ORIGIN) {
     return res.status(403).json({ error: "Forbidden" });
@@ -213,15 +230,15 @@ module.exports = async function (req, res) {
   const user = authHeader ? await verifySupabaseToken(authHeader) : null;
 
   if (user) {
-    const usage = await checkAndIncrementUsage(user.id);
+    const limit = await getUserPlanLimit(user.id);
+    const usage = await checkAndIncrementUsage(user.id, limit);
     if (usage.blocked) {
       return res.status(429).json({
-        error: `You've reached today's limit of ${DAILY_MESSAGE_LIMIT} messages. Resets at midnight.`,
+        error: `You've reached today's limit of ${limit} messages. Resets at midnight.${limit === FREE_DAILY_LIMIT ? " Upgrade to Pro for a higher limit." : ""}`,
         code: "USER_LIMIT"
       });
     }
   } else {
-    // --- Layer 2: message size cap (guests only) ---
     const { messages: incomingMessages } = req.body || {};
     if (Array.isArray(incomingMessages) && totalMessageChars(incomingMessages) > MAX_GUEST_MESSAGE_CHARS) {
       return res.status(413).json({
@@ -230,7 +247,6 @@ module.exports = async function (req, res) {
       });
     }
 
-    // --- Layer 3: global guest daily cap (safety net) ---
     const globalUsage = await checkAndIncrementKeyedUsage("__global_guest_cap__", GLOBAL_GUEST_DAILY_CAP);
     if (globalUsage.blocked) {
       return res.status(503).json({
@@ -239,7 +255,6 @@ module.exports = async function (req, res) {
       });
     }
 
-    // --- Layer 4: per-IP guest limit ---
     const ip = getClientIp(req);
     const usage = await checkAndIncrementKeyedUsage(ip, GUEST_DAILY_LIMIT);
     if (usage.blocked) {
