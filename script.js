@@ -16,7 +16,8 @@ const loginGate = document.getElementById("loginGate");
 const appRoot = document.getElementById("appRoot");
 const logoutBtn = document.getElementById("logoutBtn");
 const userEmail = document.getElementById("userEmail");
-
+const userAvatarImg = document.getElementById("userAvatarImg");
+const userAvatarInitial = document.getElementById("userAvatarInitial");
 const greetingState = document.getElementById("greetingState");
 const chatLog = document.getElementById("chatLog");
 const chatForm = document.getElementById("chatForm");
