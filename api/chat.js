@@ -44,6 +44,13 @@ function buildSystemInstruction(settings = {}) {
   return parts.join("\n\n");
 }
 
+// Safety net: if a reasoning model's <think>...</think> block ever slips
+// through anyway (e.g. a model update changes behavior), strip it here
+// so it can never reach the chat UI.
+function stripThinkingBlock(text) {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
+
 const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvdXZjdnJuc2VnemVjcWRrb2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDAxOTEsImV4cCI6MjEwMjMxNjE5MX0.fnkm94U5c-gbdDMrBvVoZ4ewyEUcOlRY7TJkqkEQS1Q";
 
@@ -137,6 +144,8 @@ module.exports = async function (req, res) {
       return res.status(500).json({ error: "Server is missing GROQ_API_KEY. Set it in Vercel's dashboard." });
     }
 
+    const usingTextModel = !conversationHasImage(messages);
+
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -144,11 +153,15 @@ module.exports = async function (req, res) {
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: conversationHasImage(messages) ? VISION_MODEL : TEXT_MODEL,
+        model: usingTextModel ? TEXT_MODEL : VISION_MODEL,
         messages: [
           { role: "system", content: buildSystemInstruction(settings) },
           ...messages
-        ]
+        ],
+        // gpt-oss-120b is a reasoning model — this tells Groq to keep its
+        // internal "thinking" out of the response entirely, so the chat
+        // only ever sees the final answer.
+        ...(usingTextModel ? { reasoning_format: "hidden" } : {})
       })
     });
 
@@ -159,7 +172,8 @@ module.exports = async function (req, res) {
       return res.status(groqResponse.status).json({ error: data.error?.message || "Groq API error" });
     }
 
-    const reply = data.choices?.[0]?.message?.content || "";
+    const rawReply = data.choices?.[0]?.message?.content || "";
+    const reply = stripThinkingBlock(rawReply);
     return res.status(200).json({ reply });
 
   } catch (error) {
