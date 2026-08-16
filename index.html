@@ -3,7 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ATM Assistant</title>
+  <title>ATM Assistant — AI Chat Assistant for Email Marketing</title>
+
+  <!-- ===================== SEO ===================== -->
+  <meta name="description" content="ATM Assistant is an AI chat assistant sharp on email marketing — built by Toheeb Akanni. Ask anything, get answers grounded in real marketing strategy." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://assistant.toheebakanni.name.ng/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ATM Assistant — AI Chat Assistant for Email Marketing" />
+  <meta property="og:description" content="An AI chat assistant sharp on email marketing, built by Toheeb Akanni." />
+  <meta property="og:url" content="https://assistant.toheebakanni.name.ng/" />
+  <!-- Add an og:image once you have a 1200x630 preview banner:
+  <meta property="og:image" content="https://assistant.toheebakanni.name.ng/preview.png" /> -->
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="ATM Assistant" />
+  <meta name="twitter:description" content="An AI chat assistant sharp on email marketing." />
+
+  <meta name="theme-color" content="#131A26" />
+  <!-- =================================================== -->
+
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
@@ -23,7 +43,12 @@
 
       <form id="authForm" class="auth-form">
         <input type="email" id="authEmail" placeholder="Email" required autocomplete="email" />
-        <input type="password" id="authPassword" placeholder="Password" required autocomplete="current-password" />
+
+        <div class="password-field">
+          <input type="password" id="authPassword" placeholder="Password" required autocomplete="current-password" />
+          <button type="button" id="togglePasswordBtn" class="toggle-password" aria-label="Show password">👁</button>
+        </div>
+
         <button type="submit" id="authSubmitBtn" class="login-btn">Log in</button>
       </form>
 
@@ -140,6 +165,6 @@
 
   </div>
 
-  <script src="script.js?v=10"></script>
+  <script src="script.js?v=11"></script>
 </body>
 </html>
