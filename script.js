@@ -451,6 +451,29 @@ async function handleSend(event) {
     sessions.unshift(newSession);
     activeId = newSession.id;
   }
+  
+  function addTypingIndicator() {
+  const wrapper = document.createElement("div");
+  wrapper.className = "message assistant";
+  wrapper.id = "typingIndicator";
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = "✉";
+
+  const body = document.createElement("div");
+  body.className = "message-body";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble typing-indicator";
+  bubble.innerHTML = `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+
+  body.appendChild(bubble);
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(body);
+  chatLog.appendChild(wrapper);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
 
   // Build the message content. Plain string for text-only messages
   // (keeps things simple/compact) — an array of parts only when
@@ -482,6 +505,7 @@ async function handleSend(event) {
   renderAttachmentPreview();
   autoGrow();
   setLoading(true);
+  addTypingIndicator();
 
   try {
     const reply = await callGroqAPI(session.messages);
