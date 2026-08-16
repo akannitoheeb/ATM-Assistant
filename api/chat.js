@@ -3,17 +3,35 @@
 // Same purpose as before: keeps the real Groq API key hidden
 // from anyone visiting the site.
 //
-// Stage 4: requests with no login token are now allowed through
-// as "guests," limited to 1 message per IP address per day.
+// Abuse protection layers, in order:
+//   1. Origin lock — only requests from our own page are accepted
+//   2. Message size cap — blocks absurdly long guest payloads
+//   3. Global guest daily cap — safety net independent of per-IP
+//      tracking, in case someone rotates IPs
+//   4. Per-IP guest limit (1/day) — existing
+//   5. Per-user logged-in limit (25/day) — existing
 // ============================================================
 
 const TEXT_MODEL = "openai/gpt-oss-120b";
 const VISION_MODEL = "qwen/qwen3.6-27b";
 
+const ALLOWED_ORIGIN = "https://assistant.toheebakanni.name.ng";
+const MAX_GUEST_MESSAGE_CHARS = 4000;
+const GLOBAL_GUEST_DAILY_CAP = 300;
+
 function conversationHasImage(messages) {
   return messages.some(
     (msg) => Array.isArray(msg.content) && msg.content.some((part) => part.type === "image_url")
   );
+}
+
+function totalMessageChars(messages) {
+  return messages.reduce((sum, msg) => {
+    const text = Array.isArray(msg.content)
+      ? (msg.content.find((p) => p.type === "text")?.text || "")
+      : (msg.content || "");
+    return sum + text.length;
+  }, 0);
 }
 
 const BASE_INSTRUCTION = `
@@ -127,14 +145,15 @@ async function checkAndIncrementUsage(userId) {
   return { blocked: false };
 }
 
-// Same idea as checkAndIncrementUsage, but keyed by IP address in a
-// separate table — for visitors who haven't logged in yet.
-async function checkAndIncrementGuestUsage(ip) {
+// Generic day-keyed counter against ip_usage_limits, keyed by whatever
+// string you pass in — a real IP for per-visitor tracking, or a fixed
+// reserved key (e.g. "__global_guest_cap__") for a sitewide total.
+async function checkAndIncrementKeyedUsage(key, limit) {
   const today = new Date().toISOString().slice(0, 10);
   const headers = supabaseHeaders();
 
   const getRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${encodeURIComponent(ip)}&select=*`,
+    `${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${encodeURIComponent(key)}&select=*`,
     { headers }
   );
   const rows = await getRes.json();
@@ -144,13 +163,13 @@ async function checkAndIncrementGuestUsage(ip) {
     await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ ip_address: ip, message_count: 1, reset_date: today })
+      body: JSON.stringify({ ip_address: key, message_count: 1, reset_date: today })
     });
     return { blocked: false };
   }
 
   if (row.reset_date !== today) {
-    await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${encodeURIComponent(ip)}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${encodeURIComponent(key)}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ message_count: 1, reset_date: today })
@@ -158,11 +177,11 @@ async function checkAndIncrementGuestUsage(ip) {
     return { blocked: false };
   }
 
-  if (row.message_count >= GUEST_DAILY_LIMIT) {
+  if (row.message_count >= limit) {
     return { blocked: true };
   }
 
-  await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${encodeURIComponent(ip)}`, {
+  await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${encodeURIComponent(key)}`, {
     method: "PATCH",
     headers,
     body: JSON.stringify({ message_count: row.message_count + 1 })
@@ -182,6 +201,14 @@ module.exports = async function (req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
+  // --- Layer 1: origin lock ---
+  // Blocks anyone calling this endpoint from outside our own page
+  // (e.g. a copied script, another site, a bare curl request).
+  const origin = req.headers.origin;
+  if (origin !== ALLOWED_ORIGIN) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
   const authHeader = req.headers.authorization;
   const user = authHeader ? await verifySupabaseToken(authHeader) : null;
 
@@ -194,8 +221,27 @@ module.exports = async function (req, res) {
       });
     }
   } else {
+    // --- Layer 2: message size cap (guests only) ---
+    const { messages: incomingMessages } = req.body || {};
+    if (Array.isArray(incomingMessages) && totalMessageChars(incomingMessages) > MAX_GUEST_MESSAGE_CHARS) {
+      return res.status(413).json({
+        error: "That message is too long to try as a guest. Sign up for full access.",
+        code: "GUEST_LIMIT"
+      });
+    }
+
+    // --- Layer 3: global guest daily cap (safety net) ---
+    const globalUsage = await checkAndIncrementKeyedUsage("__global_guest_cap__", GLOBAL_GUEST_DAILY_CAP);
+    if (globalUsage.blocked) {
+      return res.status(503).json({
+        error: "Guest access is temporarily paused for today. Please sign up or log in to keep chatting.",
+        code: "GUEST_LIMIT"
+      });
+    }
+
+    // --- Layer 4: per-IP guest limit ---
     const ip = getClientIp(req);
-    const usage = await checkAndIncrementGuestUsage(ip);
+    const usage = await checkAndIncrementKeyedUsage(ip, GUEST_DAILY_LIMIT);
     if (usage.blocked) {
       return res.status(403).json({
         error: "You've used your free message for today. Sign up or log in to keep chatting.",
