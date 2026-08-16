@@ -38,11 +38,44 @@ const fileInput = document.getElementById("fileInput");
 const attachmentPreview = document.getElementById("attachmentPreview");
 const newChatBtn = document.getElementById("newChatBtn");
 const historyList = document.getElementById("historyList");
+const historySearchInput = document.getElementById("historySearchInput");
+let historyFilter = "";
+
+historySearchInput.addEventListener("input", () => {
+  historyFilter = historySearchInput.value.trim().toLowerCase();
+  renderSidebar();
+});
 const sidebar = document.getElementById("sidebar");
 const mobileMenuBtn = document.getElementById("mobileMenuBtn");
 const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
 const settingsBtn = document.getElementById("settingsBtn");
+const accountTrigger = document.getElementById("accountTrigger");
+const accountPopup = document.getElementById("accountPopup");
+const popupSettingsBtn = document.getElementById("popupSettingsBtn");
+
+function closeAccountPopup() {
+  accountPopup.classList.add("hidden");
+  accountTrigger.setAttribute("aria-expanded", "false");
+}
+
+accountTrigger.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = accountPopup.classList.contains("hidden");
+  accountPopup.classList.toggle("hidden", !willOpen);
+  accountTrigger.setAttribute("aria-expanded", String(willOpen));
+});
+
+document.addEventListener("click", (e) => {
+  if (!accountPopup.classList.contains("hidden") && !accountBlock.contains(e.target)) {
+    closeAccountPopup();
+  }
+});
+
+popupSettingsBtn.addEventListener("click", () => {
+  closeAccountPopup();
+  settingsBtn.click();
+});
 const settingsOverlay = document.getElementById("settingsOverlay");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
 const saveSettingsBtn = document.getElementById("saveSettingsBtn");
@@ -131,7 +164,8 @@ function updateAuthFormLabels() {
 togglePasswordBtn.addEventListener("click", () => {
   const isPassword = authPassword.type === "password";
   authPassword.type = isPassword ? "text" : "password";
-  togglePasswordBtn.textContent = isPassword ? "🙈" : "👁";
+  togglePasswordBtn.querySelector(".eye-open").classList.toggle("hidden", isPassword);
+  togglePasswordBtn.querySelector(".eye-closed").classList.toggle("hidden", !isPassword);
   togglePasswordBtn.setAttribute("aria-label", isPassword ? "Hide password" : "Show password");
 });
 
@@ -212,7 +246,10 @@ function notifyBrevoSignup(email, name) {
   });
 }
 
-logoutBtn.addEventListener("click", () => supabaseClient.auth.signOut());
+logoutBtn.addEventListener("click", () => {
+  closeAccountPopup();
+  supabaseClient.auth.signOut();
+});
 
 // Fires on initial page load (restoring a saved session) AND
 // whenever the user logs in or out — one place to react to both.
@@ -288,6 +325,7 @@ function showGuestMode() {
 // Upgrade to Pro
 // --------------------------------------------------------------
 upgradeBtn.addEventListener("click", () => {
+  closeAccountPopup();
   upgradeError.classList.add("hidden");
   upgradeOverlay.classList.remove("hidden");
 });
@@ -652,7 +690,19 @@ async function callGroqAPI(messages) {
 function renderSidebar() {
   historyList.innerHTML = "";
 
-  sessions.forEach(session => {
+  const visibleSessions = historyFilter
+    ? sessions.filter(s => (s.title || "New chat").toLowerCase().includes(historyFilter))
+    : sessions;
+
+  if (historyFilter && visibleSessions.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "No chats found";
+    historyList.appendChild(empty);
+    return;
+  }
+
+  visibleSessions.forEach(session => {
     const item = document.createElement("div");
     item.className = "history-item" + (session.id === activeId ? " active" : "");
 

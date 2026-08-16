@@ -49,6 +49,10 @@
       </div>
 
       <nav class="chat-history">
+        <div class="history-search-wrap">
+          <svg class="history-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="historySearchInput" class="history-search-input" placeholder="Search chats" autocomplete="off" />
+        </div>
         <div class="history-label">Recent</div>
         <!-- Past chat entries get inserted here by script.js -->
         <div id="historyList"></div>
@@ -66,15 +70,26 @@
 
         <!-- Shown once logged in -->
         <div id="accountBlock" class="account-block hidden">
-          <div class="account-row">
+          <button type="button" id="accountTrigger" class="account-row" aria-haspopup="true" aria-expanded="false">
             <div class="user-avatar-wrap">
               <img id="userAvatarImg" class="user-avatar-img hidden" alt="" />
               <span id="userAvatarInitial" class="user-avatar-initial">…</span>
             </div>
             <span id="userEmail" class="user-tag">…</span>
+          </button>
+
+          <div id="accountPopup" class="account-popup hidden">
+            <button id="upgradeBtn" class="account-popup-item upgrade-item hidden">
+              <span class="popup-icon">✨</span> Upgrade to Pro
+            </button>
+            <button id="popupSettingsBtn" class="account-popup-item">
+              <span class="popup-icon">⚙</span> Settings
+            </button>
+            <div class="account-popup-divider"></div>
+            <button id="logoutBtn" class="account-popup-item logout-item">
+              <span class="popup-icon">⎋</span> Log out
+            </button>
           </div>
-          <button id="upgradeBtn" class="upgrade-btn hidden">✨ Upgrade to Pro</button>
-          <button id="logoutBtn" class="logout-link">Log out</button>
         </div>
       </div>
     </aside>
@@ -93,7 +108,10 @@
 
             <div class="password-field">
               <input type="password" id="authPassword" placeholder="Password" required autocomplete="current-password" />
-              <button type="button" id="togglePasswordBtn" class="toggle-password" aria-label="Show password">👁</button>
+              <button type="button" id="togglePasswordBtn" class="toggle-password" aria-label="Show password">
+                <svg class="eye-icon eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7.5 11-7.5 11 7.5 11 7.5-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-icon eye-closed hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19.5C5 19.5 1 12 1 12a20.6 20.6 0 0 1 5.06-5.94M9.9 4.74A10.5 10.5 0 0 1 12 4.5c7 0 11 7.5 11 7.5a20.6 20.6 0 0 1-3.22 4.36M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
             </div>
 
             <button type="submit" id="authSubmitBtn" class="login-btn">Log in</button>
@@ -124,16 +142,38 @@
     
     <!-- ===================== UPGRADE / PRICING MODAL ===================== -->
     <div id="upgradeOverlay" class="modal-overlay hidden">
-      <div class="modal">
+      <div class="modal upgrade-modal">
         <div class="modal-header">
-          <h2>Upgrade to Pro</h2>
+          <h2>Upgrade your plan</h2>
           <button id="closeUpgradeBtn" class="modal-close" aria-label="Close">✕</button>
         </div>
         <div class="modal-body">
-          <p class="upgrade-desc">200 messages a day instead of 25 — for $5/mo or ₦8,000/mo. Cancel anytime.</p>
-          <div class="currency-choice">
-            <button type="button" class="currency-btn" data-currency="NGN">🇳🇬 Pay in Naira — ₦8,000/mo</button>
-            <button type="button" class="currency-btn" data-currency="USD">🌍 Pay in Dollars — $5/mo</button>
+          <div class="plans-grid">
+            <div class="plan-card">
+              <div class="plan-name">Free</div>
+              <div class="plan-tagline">Try ATM Assistant</div>
+              <ul class="plan-features">
+                <li>25 messages a day</li>
+                <li>Answers tuned for email marketing</li>
+                <li>Chats saved to your account</li>
+              </ul>
+              <button type="button" class="plan-btn plan-btn-current" disabled>Your current plan</button>
+            </div>
+
+            <div class="plan-card plan-card-pro">
+              <div class="plan-badge">Recommended</div>
+              <div class="plan-name">Pro</div>
+              <div class="plan-tagline">For everyday use</div>
+              <ul class="plan-features">
+                <li>200 messages a day</li>
+                <li>Everything in Free</li>
+                <li>Priority replies</li>
+              </ul>
+              <div class="currency-choice">
+                <button type="button" class="currency-btn" data-currency="NGN">🇳🇬 Pay in Naira — ₦8,000/mo</button>
+                <button type="button" class="currency-btn" data-currency="USD">🌍 Pay in Dollars — $5/mo</button>
+              </div>
+            </div>
           </div>
           <p id="upgradeError" class="auth-error hidden"></p>
         </div>
