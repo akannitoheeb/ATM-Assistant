@@ -2,6 +2,9 @@
 // This function runs on Vercel's SERVER, not in the browser.
 // Same purpose as before: keeps the real Groq API key hidden
 // from anyone visiting the site.
+//
+// Stage 4: requests with no login token are now allowed through
+// as "guests," limited to 1 message per IP address per day.
 // ============================================================
 
 const TEXT_MODEL = "openai/gpt-oss-120b";
@@ -48,9 +51,6 @@ function buildSystemInstruction(settings = {}) {
   return parts.join("\n\n");
 }
 
-// Safety net: if a reasoning model's <think>...</think> block ever slips
-// through anyway (e.g. a model update changes behavior), strip it here
-// so it can never reach the chat UI.
 function stripThinkingBlock(text) {
   return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }
@@ -74,17 +74,21 @@ async function verifySupabaseToken(authHeader) {
 }
 
 const DAILY_MESSAGE_LIMIT = 25;
+const GUEST_DAILY_LIMIT = 1;
 
-async function checkAndIncrementUsage(userId) {
+function supabaseHeaders() {
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  const today = new Date().toISOString().slice(0, 10);
-
-  const headers = {
+  return {
     "Content-Type": "application/json",
     "apikey": serviceKey,
     "Authorization": `Bearer ${serviceKey}`,
     "Prefer": "return=representation"
   };
+}
+
+async function checkAndIncrementUsage(userId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const headers = supabaseHeaders();
 
   const getRes = await fetch(
     `${SUPABASE_URL}/rest/v1/usage_limits?user_id=eq.${userId}&select=*`,
@@ -123,21 +127,81 @@ async function checkAndIncrementUsage(userId) {
   return { blocked: false };
 }
 
-// ---- Vercel handler format (this part replaces exports.handler) ----
+// Same idea as checkAndIncrementUsage, but keyed by IP address in a
+// separate table — for visitors who haven't logged in yet.
+async function checkAndIncrementGuestUsage(ip) {
+  const today = new Date().toISOString().slice(0, 10);
+  const headers = supabaseHeaders();
+
+  const getRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${encodeURIComponent(ip)}&select=*`,
+    { headers }
+  );
+  const rows = await getRes.json();
+  const row = rows[0];
+
+  if (!row) {
+    await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ip_address: ip, message_count: 1, reset_date: today })
+    });
+    return { blocked: false };
+  }
+
+  if (row.reset_date !== today) {
+    await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${encodeURIComponent(ip)}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ message_count: 1, reset_date: today })
+    });
+    return { blocked: false };
+  }
+
+  if (row.message_count >= GUEST_DAILY_LIMIT) {
+    return { blocked: true };
+  }
+
+  await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${encodeURIComponent(ip)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ message_count: row.message_count + 1 })
+  });
+  return { blocked: false };
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.socket?.remoteAddress || "unknown";
+}
+
+// ---- Vercel handler format ----
 module.exports = async function (req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   const authHeader = req.headers.authorization;
-  const user = await verifySupabaseToken(authHeader);
-  if (!user) {
-    return res.status(401).json({ error: "Please log in to use the assistant." });
-  }
+  const user = authHeader ? await verifySupabaseToken(authHeader) : null;
 
-  const usage = await checkAndIncrementUsage(user.id);
-  if (usage.blocked) {
-    return res.status(429).json({ error: `You've reached today's limit of ${DAILY_MESSAGE_LIMIT} messages. Resets at midnight.` });
+  if (user) {
+    const usage = await checkAndIncrementUsage(user.id);
+    if (usage.blocked) {
+      return res.status(429).json({
+        error: `You've reached today's limit of ${DAILY_MESSAGE_LIMIT} messages. Resets at midnight.`,
+        code: "USER_LIMIT"
+      });
+    }
+  } else {
+    const ip = getClientIp(req);
+    const usage = await checkAndIncrementGuestUsage(ip);
+    if (usage.blocked) {
+      return res.status(403).json({
+        error: "You've used your free message for today. Sign up or log in to keep chatting.",
+        code: "GUEST_LIMIT"
+      });
+    }
   }
 
   try {
@@ -162,9 +226,6 @@ module.exports = async function (req, res) {
           { role: "system", content: buildSystemInstruction(settings) },
           ...messages
         ],
-        // gpt-oss-120b is a reasoning model — this tells Groq to keep its
-        // internal "thinking" out of the response entirely, so the chat
-        // only ever sees the final answer.
         ...(usingTextModel ? { reasoning_format: "hidden" } : {})
       })
     });
