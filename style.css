@@ -1118,3 +1118,57 @@ body {
   color: var(--gold);
   text-decoration: underline;
 }
+
+.upgrade-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.upgrade-btn:hover {
+  background: rgba(201, 150, 46, 0.1);
+}
+
+.upgrade-desc {
+  color: var(--text-soft);
+  font-size: 13.5px;
+  margin-bottom: 18px;
+}
+
+.currency-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.currency-btn {
+  width: 100%;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease;
+}
+
+.currency-btn:hover {
+  border-color: var(--gold);
+}
+
+.currency-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
