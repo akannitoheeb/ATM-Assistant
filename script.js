@@ -251,8 +251,9 @@ async function onLogin(user) {
 
   // Was this account created moments ago? Covers Google sign-in, which
   // has no separate "signup" button to hook into like the email form does.
-  const createdMsAgo = Date.now() - new Date(user.created_at).getTime();
-  const isFreshAccount = createdMsAgo < 15000;
+  const createdAt = new Date(user.created_at).getTime();
+  const lastSignIn = new Date(user.last_sign_in_at).getTime();
+  const isFreshAccount = Math.abs(lastSignIn - createdAt) < 15000;
   const isGoogleUser = user.app_metadata?.provider === "google";
 
   if (isFreshAccount && isGoogleUser) {
