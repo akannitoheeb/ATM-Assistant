@@ -1106,3 +1106,15 @@ body {
 .login-modal .login-box {
   animation: loginFadeUp 0.4s ease both;
 }
+
+.auth-legal-note {
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.auth-legal-note a {
+  color: var(--gold);
+  text-decoration: underline;
+}
