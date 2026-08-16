@@ -73,6 +73,7 @@
             </div>
             <span id="userEmail" class="user-tag">…</span>
           </div>
+          <button id="upgradeBtn" class="upgrade-btn hidden">✨ Upgrade to Pro</button>
           <button id="logoutBtn" class="logout-link">Log out</button>
         </div>
       </div>
@@ -117,6 +118,24 @@
 
           <p<p class="auth-legal-note">By continuing, you agree to our <a href="/terms.html">Terms</a> and <a href="/privacy.html">Privacy Policy</a>.</p>
           <p id="authError" class="auth-error hidden"></p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- ===================== UPGRADE / PRICING MODAL ===================== -->
+    <div id="upgradeOverlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Upgrade to Pro</h2>
+          <button id="closeUpgradeBtn" class="modal-close" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="upgrade-desc">200 messages a day instead of 25 — for $5/mo or ₦8,000/mo. Cancel anytime.</p>
+          <div class="currency-choice">
+            <button type="button" class="currency-btn" data-currency="NGN">🇳🇬 Pay in Naira — ₦8,000/mo</button>
+            <button type="button" class="currency-btn" data-currency="USD">🌍 Pay in Dollars — $5/mo</button>
+          </div>
+          <p id="upgradeError" class="auth-error hidden"></p>
         </div>
       </div>
     </div>
