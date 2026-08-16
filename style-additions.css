@@ -1,0 +1,45 @@
+/* ===================== Guest mode additions ===================== */
+
+.guest-block {
+  padding: 2px 8px 4px 8px;
+}
+
+.signup-prompt-btn {
+  width: 100%;
+  background: var(--gold);
+  color: var(--navy-deep, #16202E);
+  border: none;
+  border-radius: 6px;
+  padding: 9px 10px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.signup-prompt-btn:hover {
+  background: var(--gold-deep);
+}
+
+/* Login gate is now a modal instead of a full-screen takeover */
+.login-modal {
+  max-width: 380px;
+  background: var(--bg-main);
+  background-image:
+    radial-gradient(circle at 15% 10%, rgba(201,150,46,0.09), transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(201,150,46,0.07), transparent 45%);
+  padding: 32px 24px 24px 24px;
+  position: relative;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.auth-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.login-modal .login-box {
+  animation: loginFadeUp 0.4s ease both;
+}

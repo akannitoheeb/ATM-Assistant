@@ -1,9 +1,10 @@
 // ============================================================
-// ATM Assistant — Stage 3 (Supabase accounts + database)
+// ATM Assistant — Stage 4 (guest mode + accounts)
 //
-// Chats and settings now live in Supabase, tied to your account,
-// instead of just this browser — so they follow you to any
-// device you log into. Login/signup is also handled by Supabase.
+// Chat is visible immediately, even before logging in. Guests get
+// 1 free message per day (tracked by IP, on the server). Once
+// that's used, the login/signup modal opens automatically. Logged
+// in, chats/settings sync to Supabase as before.
 // ============================================================
 
 const CHAT_API_URL = "/api/chat";
@@ -12,12 +13,17 @@ const BREVO_SIGNUP_URL = "/api/brevo-signup";
 // --------------------------------------------------------------
 // Element references
 // --------------------------------------------------------------
-const loginGate = document.getElementById("loginGate");
-const appRoot = document.getElementById("appRoot");
+const guestBlock = document.getElementById("guestBlock");
+const accountBlock = document.getElementById("accountBlock");
+const openAuthBtn = document.getElementById("openAuthBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const userEmail = document.getElementById("userEmail");
 const userAvatarImg = document.getElementById("userAvatarImg");
 const userAvatarInitial = document.getElementById("userAvatarInitial");
+
+const authOverlay = document.getElementById("authOverlay");
+const closeAuthBtn = document.getElementById("closeAuthBtn");
+
 const greetingState = document.getElementById("greetingState");
 const chatLog = document.getElementById("chatLog");
 const chatForm = document.getElementById("chatForm");
@@ -41,11 +47,12 @@ const nigeriaToggle = document.getElementById("nigeriaToggle");
 const customInstruction = document.getElementById("customInstruction");
 
 // --------------------------------------------------------------
-// App state — filled in once the user logs in
+// App state
 // --------------------------------------------------------------
 let sessions = [];
 let activeId = null;
 let settings = defaultSettings();
+let isGuest = true; // flips to false once logged in
 
 function defaultSettings() {
   return {
@@ -57,10 +64,6 @@ function defaultSettings() {
 
 // ================================================================
 // SUPABASE SETUP
-// Paste your own Project URL and anon key here — get them from
-// Supabase → Settings → API. These are safe to be public; the
-// database's Row Level Security rules are what actually protect
-// everyone's data, not secrecy of this key.
 // ================================================================
 const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvdXZjdnJuc2VnemVjcWRrb2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDAxOTEsImV4cCI6MjEwMjMxNjE5MX0.fnkm94U5c-gbdDMrBvVoZ4ewyEUcOlRY7TJkqkEQS1Q";
@@ -79,6 +82,24 @@ const authSubtext = document.getElementById("authSubtext");
 const authError = document.getElementById("authError");
 
 let authMode = "login"; // or "signup"
+
+// --------------------------------------------------------------
+// Auth modal open/close
+// --------------------------------------------------------------
+function openAuthModal() {
+  authError.classList.add("hidden");
+  authOverlay.classList.remove("hidden");
+}
+
+function closeAuthModal() {
+  authOverlay.classList.add("hidden");
+}
+
+openAuthBtn.addEventListener("click", openAuthModal);
+closeAuthBtn.addEventListener("click", closeAuthModal);
+authOverlay.addEventListener("click", (event) => {
+  if (event.target === authOverlay) closeAuthModal();
+});
 
 authToggleBtn.addEventListener("click", () => {
   authMode = authMode === "login" ? "signup" : "login";
@@ -123,11 +144,45 @@ function friendlyAuthError(message) {
   return map[message] || message;
 }
 
+// --------------------------------------------------------------
+// Email/password submit
+// --------------------------------------------------------------
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   authError.classList.add("hidden");
   authSubmitBtn.disabled = true;
 
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+  const wasSignup = authMode === "signup";
+
+  try {
+    const { error } =
+      authMode === "login"
+        ? await supabaseClient.auth.signInWithPassword({ email, password })
+        : await supabaseClient.auth.signUp({ email, password });
+
+    if (error) throw error;
+
+    if (wasSignup) {
+      notifyBrevoSignup(email, "");
+    }
+    // On success, onAuthStateChange (below) handles showing the app
+    // and closes the modal via onLogin().
+  } catch (error) {
+    authError.textContent = friendlyAuthError(error.message);
+    authError.classList.remove("hidden");
+    authForm.classList.add("shake");
+    setTimeout(() => authForm.classList.remove("shake"), 400);
+  } finally {
+    authSubmitBtn.disabled = false;
+  }
+});
+
+// --------------------------------------------------------------
+// Google sign-in — its own top-level listener, not nested inside
+// the email/password submit handler.
+// --------------------------------------------------------------
 googleAuthBtn.addEventListener("click", async () => {
   authError.classList.add("hidden");
   const { error } = await supabaseClient.auth.signInWithOAuth({
@@ -142,34 +197,6 @@ googleAuthBtn.addEventListener("click", async () => {
   // below picks it up automatically once the user returns.
 });
 
-  const email = authEmail.value.trim();
-  const password = authPassword.value;
-  const wasSignup = authMode === "signup";
-
-  try {
-    const { error } =
-      authMode === "login"
-        ? await supabaseClient.auth.signInWithPassword({ email, password })
-        : await supabaseClient.auth.signUp({ email, password });
-
-    if (error) throw error;
-
-    // Fire-and-forget: add the new user to Brevo for a welcome email /
-    // automation. Doesn't block or fail the signup if Brevo has an issue.
-    if (wasSignup) {
-  notifyBrevoSignup(email, "");
-}
-    // On success, onAuthStateChange (below) handles showing the app.
-  } catch (error) {
-    authError.textContent = friendlyAuthError(error.message);
-    authError.classList.remove("hidden");
-    authForm.classList.add("shake");
-    setTimeout(() => authForm.classList.remove("shake"), 400);
-  } finally {
-    authSubmitBtn.disabled = false;
-  }
-});
-
 function notifyBrevoSignup(email, name) {
   fetch(BREVO_SIGNUP_URL, {
     method: "POST",
@@ -180,10 +207,29 @@ function notifyBrevoSignup(email, name) {
   });
 }
 
+logoutBtn.addEventListener("click", () => supabaseClient.auth.signOut());
+
+// Fires on initial page load (restoring a saved session) AND
+// whenever the user logs in or out — one place to react to both.
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (session && session.user) {
+    onLogin(session.user);
+  } else {
+    showGuestMode();
+  }
+});
+
+// --------------------------------------------------------------
+// Logged-in state (single definition — do not duplicate this
+// function elsewhere in the file, or the second one silently wins)
+// --------------------------------------------------------------
 async function onLogin(user) {
+  isGuest = false;
+  closeAuthModal();
+
   const fullName = user.user_metadata?.full_name || user.user_metadata?.name || "";
   userEmail.textContent = fullName ? `${fullName} · ${user.email}` : user.email;
-  
+
   const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || "";
   if (avatarUrl) {
     userAvatarImg.src = avatarUrl;
@@ -195,14 +241,13 @@ async function onLogin(user) {
     userAvatarInitial.textContent = (fullName || user.email).charAt(0).toUpperCase();
   }
 
-  loginGate.classList.add("hidden");
-  appRoot.classList.remove("hidden");
+  guestBlock.classList.add("hidden");
+  accountBlock.classList.remove("hidden");
 
-  // Was this account created moments ago (i.e. this is a brand-new sign-in,
-  // not someone returning)? Covers Google sign-in, which has no separate
-  // "signup" button to hook into like the email/password form does.
+  // Was this account created moments ago? Covers Google sign-in, which
+  // has no separate "signup" button to hook into like the email form does.
   const createdMsAgo = Date.now() - new Date(user.created_at).getTime();
-  const isFreshAccount = createdMsAgo < 15000; // within 15 seconds of creation
+  const isFreshAccount = createdMsAgo < 15000;
   const isGoogleUser = user.app_metadata?.provider === "google";
 
   if (isFreshAccount && isGoogleUser) {
@@ -216,38 +261,24 @@ async function onLogin(user) {
   renderActiveChat();
 }
 
-logoutBtn.addEventListener("click", () => supabaseClient.auth.signOut());
+// --------------------------------------------------------------
+// Guest state — chat stays usable, nothing persists across reloads
+// --------------------------------------------------------------
+function showGuestMode() {
+  isGuest = true;
+  accountBlock.classList.add("hidden");
+  guestBlock.classList.remove("hidden");
 
-// Fires on initial page load (restoring a saved session) AND
-// whenever the user logs in or out — one place to react to both.
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (session && session.user) {
-    onLogin(session.user);
-  } else {
-    showLoginGate();
-  }
-});
-
-async function onLogin(user) {
-  userEmail.textContent = user.email;
-  loginGate.classList.add("hidden");
-  appRoot.classList.remove("hidden");
-
-  await loadUserData();
+  sessions = [];
+  settings = defaultSettings();
+  activeId = null;
   applySettingsToForm();
-  activeId = sessions.length > 0 ? sessions[0].id : null;
   renderSidebar();
   renderActiveChat();
 }
 
-function showLoginGate() {
-  loginGate.classList.remove("hidden");
-  appRoot.classList.add("hidden");
-  authForm.reset();
-}
-
 // Attaches the logged-in user's access token to a request, so our
-// chat function knows who's asking.
+// chat function knows who's asking. Guests send no auth header at all.
 async function getAuthHeaders() {
   const { data } = await supabaseClient.auth.getSession();
   const token = data.session?.access_token;
@@ -255,9 +286,7 @@ async function getAuthHeaders() {
 }
 
 // ================================================================
-// SERVER-SIDE DATA — sessions + settings, stored directly in
-// Supabase (protected by the Row Level Security rules you set up),
-// no extra function needed for this part.
+// SERVER-SIDE DATA — sessions + settings, only for logged-in users
 // ================================================================
 async function loadUserData() {
   try {
@@ -280,6 +309,8 @@ async function loadUserData() {
 }
 
 async function saveUserData() {
+  if (isGuest) return; // nothing to persist for a guest session
+
   try {
     const { data: { user } } = await supabaseClient.auth.getUser();
     const { error } = await supabaseClient.from("user_data").upsert({
@@ -371,8 +402,6 @@ fileInput.addEventListener("change", async () => {
       const dataUrl = await readFileAsDataURL(file);
       pendingAttachment = { kind: "image", name: file.name, data: dataUrl };
     } else {
-      // Treat anything else as plain text — .txt, .md, .csv, etc.
-      // (PDFs and Word docs aren't supported yet — text files only for now.)
       const text = await readFileAsText(file);
       pendingAttachment = { kind: "text", name: file.name, data: text };
     }
@@ -382,7 +411,7 @@ fileInput.addEventListener("change", async () => {
     alert("Couldn't read that file. Try an image or a plain text file.");
   }
 
-  fileInput.value = ""; // allows attaching the same file again later
+  fileInput.value = "";
 });
 
 function readFileAsDataURL(file) {
@@ -435,6 +464,32 @@ function renderAttachmentPreview() {
 }
 
 // --------------------------------------------------------------
+// Typing indicator (top-level function — not nested inside handleSend)
+// --------------------------------------------------------------
+function addTypingIndicator() {
+  const wrapper = document.createElement("div");
+  wrapper.className = "message assistant";
+  wrapper.id = "typingIndicator";
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = "✉";
+
+  const body = document.createElement("div");
+  body.className = "message-body";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble typing-indicator";
+  bubble.innerHTML = `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+
+  body.appendChild(bubble);
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(body);
+  chatLog.appendChild(wrapper);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// --------------------------------------------------------------
 // Sending a message
 // --------------------------------------------------------------
 chatForm.addEventListener("submit", handleSend);
@@ -463,34 +518,7 @@ async function handleSend(event) {
     sessions.unshift(newSession);
     activeId = newSession.id;
   }
-  
-  function addTypingIndicator() {
-  const wrapper = document.createElement("div");
-  wrapper.className = "message assistant";
-  wrapper.id = "typingIndicator";
 
-  const avatar = document.createElement("div");
-  avatar.className = "avatar";
-  avatar.textContent = "✉";
-
-  const body = document.createElement("div");
-  body.className = "message-body";
-
-  const bubble = document.createElement("div");
-  bubble.className = "bubble typing-indicator";
-  bubble.innerHTML = `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
-
-  body.appendChild(bubble);
-  wrapper.appendChild(avatar);
-  wrapper.appendChild(body);
-  chatLog.appendChild(wrapper);
-  chatLog.scrollTop = chatLog.scrollHeight;
-}
-
-  // Build the message content. Plain string for text-only messages
-  // (keeps things simple/compact) — an array of parts only when
-  // there's an image or file attached, which is the format Groq's
-  // vision model expects.
   let content = text;
 
   if (pendingAttachment) {
@@ -500,8 +528,6 @@ async function handleSend(event) {
         { type: "image_url", image_url: { url: pendingAttachment.data } }
       ];
     } else {
-      // Text file — just fold its contents into the message text,
-      // no vision model needed for this.
       content = `${text}\n\n[Attached file: ${pendingAttachment.name}]\n${pendingAttachment.data}`;
     }
   }
@@ -523,20 +549,28 @@ async function handleSend(event) {
     const reply = await callGroqAPI(session.messages);
     session.messages.push({ role: "assistant", content: reply });
     saveUserData();
-    // typeLast: true animates only this newest reply, not the whole history
     renderActiveChat({ typeLast: true });
   } catch (error) {
     console.error(error);
-    session.messages.push({ role: "assistant", content: "⚠️ " + error.message });
-    renderActiveChat();
+
+    if (error.code === "GUEST_LIMIT") {
+      // Don't show this as a chat error bubble — remove the user's
+      // message from the guest's in-memory session and open the
+      // signup modal instead, since guests can't retry today anyway.
+      session.messages.pop();
+      renderActiveChat();
+      openAuthModal();
+    } else {
+      session.messages.push({ role: "assistant", content: "⚠️ " + error.message });
+      renderActiveChat();
+    }
   } finally {
     setLoading(false);
   }
 }
 
 // --------------------------------------------------------------
-// API call — sends this session's message history to OUR OWN
-// function, including our login token so the server knows it's us.
+// API call
 // --------------------------------------------------------------
 async function callGroqAPI(messages) {
   const authHeaders = await getAuthHeaders();
@@ -550,7 +584,9 @@ async function callGroqAPI(messages) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error || `Request failed with status ${response.status}`);
+    const err = new Error(data.error || `Request failed with status ${response.status}`);
+    if (data.code) err.code = data.code;
+    throw err;
   }
 
   if (!data.reply) {
@@ -645,10 +681,6 @@ function renderActiveChat(options = {}) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-// content is either a plain string, or an array of parts
-// ({type:"text"} / {type:"image_url"}) when a file was attached.
-// animate=true plays a word-by-word typing effect (used only for a
-// freshly-received AI reply, never when reloading past history).
 function addMessageToDOM(content, kind, animate = false) {
   const textPart = Array.isArray(content)
     ? (content.find(p => p.type === "text")?.text || "")
@@ -688,8 +720,6 @@ function addMessageToDOM(content, kind, animate = false) {
   }
   body.appendChild(bubble);
 
-  // Copy button under assistant replies, matching the kind of
-  // message-action row you'd see in other AI chat interfaces.
   if (kind === "assistant" && textPart) {
     const actions = document.createElement("div");
     actions.className = "message-actions";
@@ -712,11 +742,8 @@ function addMessageToDOM(content, kind, animate = false) {
   chatLog.appendChild(wrapper);
 }
 
-// Reveals an assistant reply word-by-word rather than dumping it in
-// all at once. Re-renders markdown on each growing chunk, so bold
-// text/lists still format correctly as it types.
 function typeWriterEffect(el, fullText, speedMs = 16) {
-  const tokens = fullText.split(/(\s+)/); // keeps whitespace as its own token
+  const tokens = fullText.split(/(\s+)/);
   let i = 0;
   el.innerHTML = "";
 
@@ -732,8 +759,8 @@ function typeWriterEffect(el, fullText, speedMs = 16) {
   step();
 }
 
-// Uses the first letter of the logged-in user's email for their avatar.
 function getUserInitial() {
+  if (isGuest) return "G";
   const email = userEmail.textContent || "";
   return email.charAt(0).toUpperCase() || "U";
 }
@@ -795,3 +822,9 @@ function autoGrow() {
 function getActiveSession() {
   return sessions.find(s => s.id === activeId) || null;
 }
+
+// --------------------------------------------------------------
+// Initial render — greeting shows immediately for guests, before
+// onAuthStateChange even resolves.
+// --------------------------------------------------------------
+renderActiveChat();
