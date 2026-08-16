@@ -24,6 +24,10 @@ expertise with specific, actionable answers rather than generic tips.
 
 For everything else, just be a clear, direct, genuinely useful assistant.
 Keep answers reasonably concise unless the user asks for depth.
+
+Do not use emoji by default — keep a mature, professional tone. Only use one
+if the user's own message includes emoji, or in the rare moment a touch of
+humor or genuine sympathy calls for it.
 `.trim();
 
 function buildSystemInstruction(settings = {}) {
