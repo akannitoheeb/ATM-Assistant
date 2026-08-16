@@ -156,8 +156,8 @@ googleAuthBtn.addEventListener("click", async () => {
     // Fire-and-forget: add the new user to Brevo for a welcome email /
     // automation. Doesn't block or fail the signup if Brevo has an issue.
     if (wasSignup) {
-      notifyBrevoSignup(email);
-    }
+  notifyBrevoSignup(email, "");
+}
     // On success, onAuthStateChange (below) handles showing the app.
   } catch (error) {
     authError.textContent = friendlyAuthError(error.message);
@@ -169,14 +169,39 @@ googleAuthBtn.addEventListener("click", async () => {
   }
 });
 
-function notifyBrevoSignup(email) {
+function notifyBrevoSignup(email, name) {
   fetch(BREVO_SIGNUP_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email })
+    body: JSON.stringify({ email, name })
   }).catch((error) => {
     console.error("Brevo signup hook failed:", error);
   });
+}
+
+async function onLogin(user) {
+  const fullName = user.user_metadata?.full_name || user.user_metadata?.name || "";
+  userEmail.textContent = fullName ? `${fullName} · ${user.email}` : user.email;
+
+  loginGate.classList.add("hidden");
+  appRoot.classList.remove("hidden");
+
+  // Was this account created moments ago (i.e. this is a brand-new sign-in,
+  // not someone returning)? Covers Google sign-in, which has no separate
+  // "signup" button to hook into like the email/password form does.
+  const createdMsAgo = Date.now() - new Date(user.created_at).getTime();
+  const isFreshAccount = createdMsAgo < 15000; // within 15 seconds of creation
+  const isGoogleUser = user.app_metadata?.provider === "google";
+
+  if (isFreshAccount && isGoogleUser) {
+    notifyBrevoSignup(user.email, fullName);
+  }
+
+  await loadUserData();
+  applySettingsToForm();
+  activeId = sessions.length > 0 ? sessions[0].id : null;
+  renderSidebar();
+  renderActiveChat();
 }
 
 logoutBtn.addEventListener("click", () => supabaseClient.auth.signOut());
