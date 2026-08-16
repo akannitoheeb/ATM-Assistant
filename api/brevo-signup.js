@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { email } = req.body || {};
+  const { email, name } = req.body || {};
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
@@ -31,9 +31,11 @@ export default async function handler(req, res) {
 
   if (!BREVO_API_KEY || !BREVO_LIST_ID) {
     console.error("Brevo env vars are missing (BREVO_API_KEY / BREVO_LIST_ID)");
-    // Don't fail the signup flow just because Brevo isn't configured yet
     return res.status(200).json({ ok: false, skipped: true });
   }
+
+  const attributes = {};
+  if (name) attributes.FIRSTNAME = name.split(" ")[0];
 
   try {
     const response = await fetch("https://api.brevo.com/v3/contacts", {
@@ -44,13 +46,12 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         email,
+        attributes,
         listIds: [Number(BREVO_LIST_ID)],
-        updateEnabled: true // if the contact already exists, just add them to the list
+        updateEnabled: true
       })
     });
 
-    // Brevo returns 204 on success, 400 if the contact already exists —
-    // neither is worth failing the request over.
     if (!response.ok && response.status !== 400) {
       const errText = await response.text();
       console.error("Brevo API error:", response.status, errText);
