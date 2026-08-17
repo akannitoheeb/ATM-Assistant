@@ -16,6 +16,14 @@
 
 * { box-sizing: border-box; }
 
+/* Global "hidden" utility — every element the JS ever toggles this
+   class onto relies on this rule. !important so it always wins,
+   regardless of any later, more specific display rule for that
+   element (e.g. .guest-block { display: flex } defined further down). */
+.hidden {
+  display: none !important;
+}
+
 html, body {
   height: 100%;
   margin: 0;
