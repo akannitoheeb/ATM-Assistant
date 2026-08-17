@@ -182,6 +182,117 @@ body {
   border-left: 2px solid var(--gold);
 }
 
+.project-switcher-wrap {
+  position: relative;
+  padding: 0 4px 12px 4px;
+}
+
+.project-switcher-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-switcher-btn:hover {
+  border-color: var(--gold);
+}
+
+.project-switcher-caret {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.project-switcher-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 4px;
+  right: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 40;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.project-switcher-popup.hidden {
+  display: none;
+}
+
+.project-popup-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 8px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-popup-item:hover {
+  background: var(--bg-main);
+}
+
+.project-popup-item.active {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.project-popup-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.project-popup-row .project-popup-item {
+  flex: 1;
+}
+
+.project-popup-delete {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.project-popup-delete:hover {
+  color: #E0765A;
+  background: var(--bg-main);
+}
+
+.project-popup-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}
+
+.new-project-item {
+  color: var(--gold);
+  font-weight: 600;
+}
+
 .sidebar-bottom {
   flex-shrink: 0;
   padding: 10px 8px 2px 8px;
