@@ -32,6 +32,14 @@ const brandVoice = document.getElementById("brandVoice");
 const brandAvoidWords = document.getElementById("brandAvoidWords");
 const brandSampleEmail = document.getElementById("brandSampleEmail");
 
+const projectSwitcherBtn = document.getElementById("projectSwitcherBtn");
+const projectSwitcherPopup = document.getElementById("projectSwitcherPopup");
+const activeProjectLabel = document.getElementById("activeProjectLabel");
+const projectListContainer = document.getElementById("projectListContainer");
+const newProjectBtn = document.getElementById("newProjectBtn");
+const brandProfileLabel = document.getElementById("brandProfileLabel");
+let activeProjectId = null; // null = "General" — the default/legacy bucket
+
 const authOverlay = document.getElementById("authOverlay");
 const closeAuthBtn = document.getElementById("closeAuthBtn");
 
@@ -88,6 +96,106 @@ popupSettingsBtn.addEventListener("click", () => {
   settingsBtn.click();
 });
 
+function closeProjectSwitcher() {
+  projectSwitcherPopup.classList.add("hidden");
+  projectSwitcherBtn.setAttribute("aria-expanded", "false");
+}
+
+projectSwitcherBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = projectSwitcherPopup.classList.contains("hidden");
+  renderProjectSwitcher();
+  projectSwitcherPopup.classList.toggle("hidden", !willOpen);
+  projectSwitcherBtn.setAttribute("aria-expanded", String(willOpen));
+});
+
+document.addEventListener("click", (e) => {
+  if (!projectSwitcherPopup.classList.contains("hidden") &&
+      !projectSwitcherBtn.contains(e.target) &&
+      !projectSwitcherPopup.contains(e.target)) {
+    closeProjectSwitcher();
+  }
+});
+
+function renderProjectSwitcher() {
+  projectListContainer.innerHTML = "";
+
+  const generalItem = document.createElement("button");
+  generalItem.type = "button";
+  generalItem.className = "project-popup-item" + (activeProjectId === null ? " active" : "");
+  generalItem.textContent = "General";
+  generalItem.addEventListener("click", () => switchProject(null));
+  projectListContainer.appendChild(generalItem);
+
+  (settings.projects || []).forEach((project) => {
+    const row = document.createElement("div");
+    row.className = "project-popup-row";
+
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "project-popup-item" + (activeProjectId === project.id ? " active" : "");
+    item.textContent = project.name;
+    item.addEventListener("click", () => switchProject(project.id));
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "project-popup-delete";
+    deleteBtn.textContent = "✕";
+    deleteBtn.setAttribute("aria-label", `Delete ${project.name}`);
+    deleteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteProject(project.id);
+    });
+
+    row.appendChild(item);
+    row.appendChild(deleteBtn);
+    projectListContainer.appendChild(row);
+  });
+}
+
+function switchProject(projectId) {
+  activeProjectId = projectId;
+  activeProjectLabel.textContent = getActiveProjectName();
+  activeId = null;
+  closeProjectSwitcher();
+  renderSidebar();
+  renderActiveChat();
+}
+
+newProjectBtn.addEventListener("click", () => {
+  const name = prompt("Name this brand/project (e.g. a client's business name):");
+  if (!name || !name.trim()) return;
+
+  const project = { id: Date.now().toString(), name: name.trim(), brandProfile: emptyBrandProfile() };
+  settings.projects = settings.projects || [];
+  settings.projects.push(project);
+  saveUserData();
+  switchProject(project.id);
+});
+
+function deleteProject(projectId) {
+  const project = (settings.projects || []).find((p) => p.id === projectId);
+  if (!project) return;
+
+  if (!confirm(`Delete "${project.name}"? Its chats move to General, they won't be deleted.`)) return;
+
+  settings.projects = settings.projects.filter((p) => p.id !== projectId);
+  sessions.forEach((s) => {
+    if (s.projectId === projectId) s.projectId = null;
+  });
+
+  if (activeProjectId === projectId) {
+    activeProjectId = null;
+    activeProjectLabel.textContent = "General";
+    activeId = null;
+  }
+
+  saveUserData();
+  renderProjectSwitcher();
+  renderSidebar();
+  renderActiveChat();
+}
+
 campaignModeBtn.addEventListener("click", () => {
   campaignMode = !campaignMode;
   campaignModeBtn.classList.toggle("active", campaignMode);
@@ -141,8 +249,32 @@ function defaultSettings() {
       voice: "",
       avoidWords: "",
       sampleEmail: ""
-    }
+    },
+    projects: []
   };
+}
+
+function emptyBrandProfile() {
+  return { name: "", industry: "", audience: "", voice: "", avoidWords: "", sampleEmail: "" };
+}
+
+function getActiveProject() {
+  if (!activeProjectId) return null;
+  return (settings.projects || []).find((p) => p.id === activeProjectId) || null;
+}
+
+function getActiveBrandProfile() {
+  const project = getActiveProject();
+  return project ? project.brandProfile : settings.brandProfile;
+}
+
+function getActiveProjectName() {
+  const project = getActiveProject();
+  return project ? project.name : "General";
+}
+
+function sessionMatchesActiveProject(session) {
+  return (session.projectId || null) === activeProjectId;
 }
 
 // ================================================================
@@ -344,8 +476,10 @@ async function onLogin(user) {
   }
 
   await loadUserData();
+  activeProjectId = null;
+  activeProjectLabel.textContent = "General";
   applySettingsToForm();
-  activeId = sessions.length > 0 ? sessions[0].id : null;
+  activeId = null;
   renderSidebar();
   renderActiveChat();
 }
@@ -362,9 +496,9 @@ function showGuestMode() {
   sessions = [];
   settings = defaultSettings();
   activeId = null;
+  activeProjectId = null;
+  activeProjectLabel.textContent = "General";
   applySettingsToForm();
-  renderSidebar();
-  renderActiveChat();
 }
 
 // --------------------------------------------------------------
@@ -435,6 +569,8 @@ async function loadUserData() {
 
     sessions = (data && data.sessions) || [];
     settings = (data && data.settings) || defaultSettings();
+    settings.projects = settings.projects || [];
+    settings.brandProfile = settings.brandProfile || emptyBrandProfile();
   } catch (error) {
     console.error("Failed to load data:", error);
     sessions = [];
@@ -478,19 +614,26 @@ settingsOverlay.addEventListener("click", (event) => {
 });
 
 saveSettingsBtn.addEventListener("click", () => {
-  settings = {
-    tone: toneSelect.value,
-    emphasizeNigeria: nigeriaToggle.checked,
-    customInstruction: customInstruction.value.trim(),
-    brandProfile: {
-      name: brandName.value.trim(),
-      industry: brandIndustry.value.trim(),
-      audience: brandAudience.value.trim(),
-      voice: brandVoice.value.trim(),
-      avoidWords: brandAvoidWords.value.trim(),
-      sampleEmail: brandSampleEmail.value.trim()
-    }
+  settings.tone = toneSelect.value;
+  settings.emphasizeNigeria = nigeriaToggle.checked;
+  settings.customInstruction = customInstruction.value.trim();
+
+  const newBrandProfile = {
+    name: brandName.value.trim(),
+    industry: brandIndustry.value.trim(),
+    audience: brandAudience.value.trim(),
+    voice: brandVoice.value.trim(),
+    avoidWords: brandAvoidWords.value.trim(),
+    sampleEmail: brandSampleEmail.value.trim()
   };
+
+  const project = getActiveProject();
+  if (project) {
+    project.brandProfile = newBrandProfile;
+  } else {
+    settings.brandProfile = newBrandProfile;
+  }
+
   saveUserData();
   settingsOverlay.classList.add("hidden");
 });
@@ -500,7 +643,8 @@ function applySettingsToForm() {
   nigeriaToggle.checked = settings.emphasizeNigeria;
   customInstruction.value = settings.customInstruction;
 
-  const bp = settings.brandProfile || defaultSettings().brandProfile;
+  const bp = getActiveBrandProfile() || emptyBrandProfile();
+  brandProfileLabel.textContent = `Brand Profile — ${getActiveProjectName()}`;
   brandName.value = bp.name;
   brandIndustry.value = bp.industry;
   brandAudience.value = bp.audience;
@@ -663,7 +807,8 @@ async function handleSend(event) {
     const newSession = {
       id: Date.now().toString(),
       title: (text || pendingAttachment.name).slice(0, 40),
-      messages: []
+      messages: [],
+      projectId: activeProjectId
     };
     sessions.unshift(newSession);
     activeId = newSession.id;
@@ -740,11 +885,12 @@ async function handleSend(event) {
   const authHeaders = await getAuthHeaders();
 
   const cleanMessages = messages.map((msg) => ({ role: msg.role, content: msg.content }));
+  const settingsForRequest = { ...settings, brandProfile: getActiveBrandProfile() };
 
   const response = await fetch(CHAT_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders },
-    body: JSON.stringify({ messages: cleanMessages, settings, mode, includeLandingPage: mode === "campaign" ? includeLandingPage : undefined })
+    body: JSON.stringify({ messages: cleanMessages, settings: settingsForRequest, mode, includeLandingPage: mode === "campaign" ? includeLandingPage : undefined })
   });
 
   const data = await response.json();
@@ -770,9 +916,11 @@ async function handleSend(event) {
 function renderSidebar() {
   historyList.innerHTML = "";
 
+  const projectSessions = sessions.filter(sessionMatchesActiveProject);
+
   const visibleSessions = historyFilter
-    ? sessions.filter(s => (s.title || "New chat").toLowerCase().includes(historyFilter))
-    : sessions;
+    ? projectSessions.filter(s => (s.title || "New chat").toLowerCase().includes(historyFilter))
+    : projectSessions;
 
   if (historyFilter && visibleSessions.length === 0) {
     const empty = document.createElement("div");
