@@ -25,6 +25,13 @@ const userEmail = document.getElementById("userEmail");
 const userAvatarImg = document.getElementById("userAvatarImg");
 const userAvatarInitial = document.getElementById("userAvatarInitial");
 
+const brandName = document.getElementById("brandName");
+const brandIndustry = document.getElementById("brandIndustry");
+const brandAudience = document.getElementById("brandAudience");
+const brandVoice = document.getElementById("brandVoice");
+const brandAvoidWords = document.getElementById("brandAvoidWords");
+const brandSampleEmail = document.getElementById("brandSampleEmail");
+
 const authOverlay = document.getElementById("authOverlay");
 const closeAuthBtn = document.getElementById("closeAuthBtn");
 
@@ -114,7 +121,15 @@ function defaultSettings() {
   return {
     tone: "friendly and warm",
     emphasizeNigeria: true,
-    customInstruction: ""
+    customInstruction: "",
+    brandProfile: {
+      name: "",
+      industry: "",
+      audience: "",
+      voice: "",
+      avoidWords: "",
+      sampleEmail: ""
+    }
   };
 }
 
@@ -454,7 +469,15 @@ saveSettingsBtn.addEventListener("click", () => {
   settings = {
     tone: toneSelect.value,
     emphasizeNigeria: nigeriaToggle.checked,
-    customInstruction: customInstruction.value.trim()
+    customInstruction: customInstruction.value.trim(),
+    brandProfile: {
+      name: brandName.value.trim(),
+      industry: brandIndustry.value.trim(),
+      audience: brandAudience.value.trim(),
+      voice: brandVoice.value.trim(),
+      avoidWords: brandAvoidWords.value.trim(),
+      sampleEmail: brandSampleEmail.value.trim()
+    }
   };
   saveUserData();
   settingsOverlay.classList.add("hidden");
@@ -464,6 +487,14 @@ function applySettingsToForm() {
   toneSelect.value = settings.tone;
   nigeriaToggle.checked = settings.emphasizeNigeria;
   customInstruction.value = settings.customInstruction;
+
+  const bp = settings.brandProfile || defaultSettings().brandProfile;
+  brandName.value = bp.name;
+  brandIndustry.value = bp.industry;
+  brandAudience.value = bp.audience;
+  brandVoice.value = bp.voice;
+  brandAvoidWords.value = bp.avoidWords;
+  brandSampleEmail.value = bp.sampleEmail;
 }
 
 // --------------------------------------------------------------
