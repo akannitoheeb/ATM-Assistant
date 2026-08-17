@@ -739,10 +739,12 @@ async function handleSend(event) {
   async function callGroqAPI(messages, mode) {
   const authHeaders = await getAuthHeaders();
 
+  const cleanMessages = messages.map((msg) => ({ role: msg.role, content: msg.content }));
+
   const response = await fetch(CHAT_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders },
-    body: JSON.stringify({ messages, settings, mode, includeLandingPage: mode === "campaign" ? includeLandingPage : undefined })
+    body: JSON.stringify({ messages: cleanMessages, settings, mode, includeLandingPage: mode === "campaign" ? includeLandingPage : undefined })
   });
 
   const data = await response.json();
