@@ -92,6 +92,18 @@ function buildSystemInstruction(settings = {}) {
     parts.push(`Additional instructions from the user: ${settings.customInstruction}`);
   }
 
+  const bp = settings.brandProfile;
+  if (bp && (bp.name || bp.industry || bp.audience || bp.voice || bp.avoidWords || bp.sampleEmail)) {
+    const brandLines = ["The user has a specific brand. Use this context whenever relevant, especially for marketing/campaign requests:"];
+    if (bp.name) brandLines.push(`- Brand name: ${bp.name}`);
+    if (bp.industry) brandLines.push(`- Industry: ${bp.industry}`);
+    if (bp.audience) brandLines.push(`- Target audience: ${bp.audience}`);
+    if (bp.voice) brandLines.push(`- Brand voice: ${bp.voice}`);
+    if (bp.avoidWords) brandLines.push(`- Never use these words/phrases: ${bp.avoidWords}`);
+    if (bp.sampleEmail) brandLines.push(`- Sample past email to match the style of:\n${bp.sampleEmail}`);
+    parts.push(brandLines.join("\n"));
+  }
+
   return parts.join("\n\n");
 }
 
