@@ -71,10 +71,48 @@ const CAMPAIGN_SCHEMA = {
   }
 };
 
+const CAMPAIGN_WITH_LANDING_SCHEMA = {
+  type: "json_schema",
+  json_schema: {
+    name: "email_campaign_with_landing",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        subject_lines: { type: "array", items: { type: "string" } },
+        preheader: { type: "string" },
+        body: { type: "string" },
+        cta_text: { type: "string" },
+        landing_page: {
+          type: "object",
+          properties: {
+            headline: { type: "string" },
+            subheadline: { type: "string" },
+            sections: { type: "array", items: { type: "string" } },
+            landing_cta_text: { type: "string" }
+          },
+          required: ["headline", "subheadline", "sections", "landing_cta_text"],
+          additionalProperties: false
+        }
+      },
+      required: ["subject_lines", "preheader", "body", "cta_text", "landing_page"],
+      additionalProperties: false
+    }
+  }
+};
+
 const CAMPAIGN_INSTRUCTION = `
 The user wants a complete email marketing campaign. Fill subject_lines with
 2-3 distinct options, write a compelling preheader, a complete email body
 (use \\n for line breaks), and a clear, specific call-to-action.
+`.trim();
+
+const LANDING_PAGE_INSTRUCTION = `
+Also design a matching landing page for this campaign — one the email's
+CTA would link to. Write a headline, a supporting subheadline, 3-5 short
+page sections (each a short paragraph covering things like the offer,
+benefits, social proof, or FAQs), and a landing page CTA button text.
+Keep the landing page's tone and message consistent with the email itself.
 `.trim();
 
 function buildSystemInstruction(settings = {}) {
@@ -347,7 +385,7 @@ module.exports = async function (req, res) {
   }
 
   try {
-    const { messages, settings, mode } = req.body;
+    const { messages, settings, mode, includeLandingPage } = req.body;
     const apiKey = process.env.GROQ_API_KEY;
 
     if (!apiKey) {
@@ -367,12 +405,16 @@ module.exports = async function (req, res) {
         messages: [
           {
             role: "system",
-            content: buildSystemInstruction(settings) + (mode === "campaign" ? "\n\n" + CAMPAIGN_INSTRUCTION : "")
+            content: buildSystemInstruction(settings)
+              + (mode === "campaign" ? "\n\n" + CAMPAIGN_INSTRUCTION : "")
+              + (mode === "campaign" && includeLandingPage ? "\n\n" + LANDING_PAGE_INSTRUCTION : "")
           },
           ...messages
         ],
         ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
-        ...(mode === "campaign" ? { response_format: CAMPAIGN_SCHEMA } : {})
+        ...(mode === "campaign"
+          ? { response_format: includeLandingPage ? CAMPAIGN_WITH_LANDING_SCHEMA : CAMPAIGN_SCHEMA }
+          : {})
       })
     });
 
