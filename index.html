@@ -48,7 +48,20 @@
         </button>
       </div>
 
-      <nav class="chat-history">
+    <nav class="chat-history">
+        <div class="project-switcher-wrap">
+          <button type="button" id="projectSwitcherBtn" class="project-switcher-btn" aria-haspopup="true" aria-expanded="false">
+            <span id="activeProjectLabel">General</span>
+            <span class="project-switcher-caret">▾</span>
+          </button>
+          <div id="projectSwitcherPopup" class="project-switcher-popup hidden">
+            <div id="projectListContainer"></div>
+            <div class="project-popup-divider"></div>
+            <button type="button" id="newProjectBtn" class="project-popup-item new-project-item">
+              <span class="popup-icon">+</span> New brand/project
+            </button>
+          </div>
+        </div>
         <div class="history-search-wrap">
           <svg class="history-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="historySearchInput" class="history-search-input" placeholder="Search chats" autocomplete="off" />
@@ -210,7 +223,7 @@
           ></textarea>
 
           <div class="settings-divider">
-            <span>Brand Profile</span>
+            <span id="brandProfileLabel">Brand Profile</span>
           </div>
           <p class="settings-hint">Used to tailor campaigns and answers to your business specifically.</p>
 
