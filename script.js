@@ -945,7 +945,11 @@ function campaignField(label, value, isBody = false) {
   labelEl.textContent = label;
   const valueEl = document.createElement("div");
   valueEl.className = isBody ? "campaign-body-text" : "campaign-value";
-  valueEl.textContent = value || "";
+  if (isBody) {
+    valueEl.innerHTML = renderMarkdown(value || "");
+  } else {
+    valueEl.textContent = value || "";
+  }
   section.appendChild(labelEl);
   section.appendChild(valueEl);
   return section;
