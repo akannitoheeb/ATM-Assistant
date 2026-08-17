@@ -866,15 +866,32 @@ function getUserInitial() {
 }
 
 // --------------------------------------------------------------
-// A small, purpose-built markdown renderer — bold, lists, paragraphs.
+// A small, purpose-built markdown renderer — bold, headings, lists,
+// tables, and paragraphs. Not a full markdown spec, just what the
+// assistant actually tends to send back.
 // --------------------------------------------------------------
+function isTableSeparatorLine(line) {
+  return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
+}
+
+function splitTableCells(line) {
+  let trimmed = line.trim();
+  if (trimmed.startsWith("|")) trimmed = trimmed.slice(1);
+  if (trimmed.endsWith("|")) trimmed = trimmed.slice(0, -1);
+  return trimmed.split("|").map(cell => cell.trim());
+}
+
 function renderMarkdown(text) {
   const escaped = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-  const withBold = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  // The model sometimes writes a literal "<br>" inside table cells to
+  // force a line break — restore it now that stray < > elsewhere are
+  // already safely escaped above.
+  const withBreaks = escaped.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
+  const withBold = withBreaks.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 
   const lines = withBold.split("\n");
   let html = "";
@@ -887,11 +904,39 @@ function renderMarkdown(text) {
     }
   }
 
-  lines.forEach(line => {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Table: a "| a | b |" row immediately followed by a "|---|---|" line
+    if (line.trim().startsWith("|") && isTableSeparatorLine(lines[i + 1] || "")) {
+      closeList();
+      const headerCells = splitTableCells(line);
+      html += "<table><thead><tr>";
+      headerCells.forEach(cell => (html += `<th>${cell}</th>`));
+      html += "</tr></thead><tbody>";
+
+      i += 2; // skip header + separator
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        const rowCells = splitTableCells(lines[i]);
+        html += "<tr>";
+        rowCells.forEach(cell => (html += `<td>${cell}</td>`));
+        html += "</tr>";
+        i++;
+      }
+      html += "</tbody></table>";
+      i--; // outer loop will i++ again
+      continue;
+    }
+
+    const headingMatch = line.match(/^\s*(#{1,4})\s+(.*)/);
     const numberedMatch = line.match(/^\s*\d+[\.\)]\s+(.*)/);
     const bulletMatch = line.match(/^\s*[-*]\s+(.*)/);
 
-    if (numberedMatch) {
+    if (headingMatch) {
+      closeList();
+      const level = Math.min(headingMatch[1].length + 2, 4); // ### -> h4, allowing up to h4
+      html += `<h${level}>${headingMatch[2]}</h${level}>`;
+    } else if (numberedMatch) {
       if (listType !== "ol") { closeList(); html += "<ol>"; listType = "ol"; }
       html += `<li>${numberedMatch[1]}</li>`;
     } else if (bulletMatch) {
@@ -903,7 +948,7 @@ function renderMarkdown(text) {
       closeList();
       html += `<p>${line}</p>`;
     }
-  });
+  }
   closeList();
 
   return html;
