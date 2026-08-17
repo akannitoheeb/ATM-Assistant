@@ -912,6 +912,19 @@ function addMessageToDOM(content, kind, animate = false) {
   chatLog.appendChild(wrapper);
 }
 
+function campaignToText(campaign) {
+  return [
+    "Subject line options:",
+    ...(campaign.subject_lines || []).map((s) => "- " + s),
+    "",
+    "Preheader: " + (campaign.preheader || ""),
+    "",
+    campaign.body || "",
+    "",
+    "CTA: " + (campaign.cta_text || "")
+  ].join("\n");
+}
+
 function addCampaignCardToDOM(campaign, warnings) {
   const wrapper = document.createElement("div");
   wrapper.className = "message assistant";
@@ -946,19 +959,6 @@ function addCampaignCardToDOM(campaign, warnings) {
   card.appendChild(campaignField("Preheader", campaign.preheader));
   card.appendChild(campaignField("Body", campaign.body, true));
   card.appendChild(campaignField("Call to action", campaign.cta_text));
-
-function campaignToText(campaign) {
-  return [
-    "Subject line options:",
-    ...(campaign.subject_lines || []).map((s) => "- " + s),
-    "",
-    "Preheader: " + (campaign.preheader || ""),
-    "",
-    campaign.body || "",
-    "",
-    "CTA: " + (campaign.cta_text || "")
-  ].join("\n");
-}
 
   if (warnings && warnings.length > 0) {
     const warnSection = document.createElement("div");
