@@ -734,6 +734,31 @@ body {
   flex-shrink: 0;
 }
 
+.settings-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.settings-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.settings-hint {
+  font-size: 12px;
+  color: var(--text-soft);
+  margin: -8px 0 0 0;
+}
+
 .save-btn {
   width: 100%;
   background: var(--gold);
