@@ -114,6 +114,50 @@ function stripThinkingBlock(text) {
 const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvdXZjdnJuc2VnemVjcWRrb2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDAxOTEsImV4cCI6MjEwMjMxNjE5MX0.fnkm94U5c-gbdDMrBvVoZ4ewyEUcOlRY7TJkqkEQS1Q";
 
+const SPAM_TRIGGER_WORDS = [
+  "act now", "buy now", "click here", "limited time", "risk-free",
+  "no obligation", "guarantee", "guaranteed", "winner", "congratulations",
+  "free money", "cash bonus", "urgent", "don't delete", "act immediately",
+  "100% free", "cheap", "discount", "amazing deal", "double your",
+  "as seen on", "no credit check", "call now", "order now", "once in a lifetime"
+];
+
+function checkDeliverability(campaign) {
+  const warnings = [];
+  const body = (campaign.body || "").toLowerCase();
+  const subjects = campaign.subject_lines || [];
+
+  const foundSpamWords = SPAM_TRIGGER_WORDS.filter(
+    (word) => body.includes(word) || subjects.some((s) => s.toLowerCase().includes(word))
+  );
+  if (foundSpamWords.length > 0) {
+    warnings.push(`Contains spam-trigger phrases: ${foundSpamWords.join(", ")}`);
+  }
+
+  subjects.forEach((s) => {
+    if (s === s.toUpperCase() && /[A-Z]/.test(s)) {
+      warnings.push(`Subject line is all caps: "${s}"`);
+    }
+    if ((s.match(/!/g) || []).length > 1) {
+      warnings.push(`Subject line has multiple exclamation marks: "${s}"`);
+    }
+    if (s.length > 60) {
+      warnings.push(`Subject line may get cut off on mobile (${s.length} chars): "${s}"`);
+    }
+  });
+
+  if (!body.includes("unsubscribe")) {
+    warnings.push("No unsubscribe language found in the body — required by law in most regions.");
+  }
+
+  const exclaimCount = (body.match(/!/g) || []).length;
+  if (exclaimCount > 3) {
+    warnings.push(`Body uses ${exclaimCount} exclamation marks — can trigger spam filters.`);
+  }
+
+  return warnings;
+}
+
 async function verifySupabaseToken(authHeader) {
   if (!authHeader) return null;
   const token = authHeader.replace(/^Bearer\s+/i, "");
@@ -343,7 +387,8 @@ module.exports = async function (req, res) {
 
     if (mode === "campaign") {
       const campaign = JSON.parse(rawReply);
-      return res.status(200).json({ campaign });
+      const warnings = checkDeliverability(campaign);
+      return res.status(200).json({ campaign, warnings });
     }
 
     const reply = stripThinkingBlock(rawReply);
