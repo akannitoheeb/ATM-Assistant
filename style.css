@@ -1175,6 +1175,39 @@ body {
   color: var(--gold);
 }
 
+.campaign-warnings {
+  background: rgba(224, 118, 90, 0.08);
+  border: 1px solid rgba(224, 118, 90, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.campaign-warnings-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #E0765A;
+  margin-bottom: 6px;
+}
+
+.campaign-warnings ul {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.campaign-warnings li {
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+
+.campaign-warnings-ok {
+  font-size: 12.5px;
+  color: #7DB88A;
+  font-weight: 600;
+}
+
 .input-stack {
   flex: 1;
   min-width: 0;
