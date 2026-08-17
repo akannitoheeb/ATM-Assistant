@@ -689,7 +689,7 @@ async function handleSend(event) {
     const result = await callGroqAPI(session.messages, mode);
 
     if (mode === "campaign") {
-      session.messages.push({ role: "assistant", content: result, kind: "campaign" });
+      session.messages.push({ role: "assistant", content: result.campaign, warnings: result.warnings, kind: "campaign" });
       saveUserData();
       renderActiveChat();
     } else {
@@ -737,7 +737,7 @@ async function handleSend(event) {
 
   if (mode === "campaign") {
     if (!data.campaign) throw new Error("No campaign data returned from the API.");
-    return data.campaign;
+    return { campaign: data.campaign, warnings: data.warnings || [] };
   }
 
   if (!data.reply) throw new Error("No text returned from the API.");
@@ -833,7 +833,7 @@ function renderActiveChat(options = {}) {
 
   session.messages.forEach((msg, index) => {
     if (msg.kind === "campaign") {
-      addCampaignCardToDOM(msg.content);
+      addCampaignCardToDOM(msg.content, msg.warnings);
       return;
     }
     const role = msg.role === "user" ? "user" : "assistant";
@@ -906,7 +906,7 @@ function addMessageToDOM(content, kind, animate = false) {
   chatLog.appendChild(wrapper);
 }
 
-function addCampaignCardToDOM(campaign) {
+function addCampaignCardToDOM(campaign, warnings) {
   const wrapper = document.createElement("div");
   wrapper.className = "message assistant";
 
@@ -941,7 +941,32 @@ function addCampaignCardToDOM(campaign) {
   card.appendChild(campaignField("Body", campaign.body, true));
   card.appendChild(campaignField("Call to action", campaign.cta_text));
 
+  if (warnings && warnings.length > 0) {
+    const warnSection = document.createElement("div");
+    warnSection.className = "campaign-warnings";
+
+    const warnLabel = document.createElement("div");
+    warnLabel.className = "campaign-warnings-label";
+    warnLabel.textContent = `⚠ ${warnings.length} deliverability flag${warnings.length > 1 ? "s" : ""}`;
+    warnSection.appendChild(warnLabel);
+
+    const warnList = document.createElement("ul");
+    warnings.forEach((w) => {
+      const li = document.createElement("li");
+      li.textContent = w;
+      warnList.appendChild(li);
+    });
+    warnSection.appendChild(warnList);
+    card.appendChild(warnSection);
+  } else {
+    const okMsg = document.createElement("div");
+    okMsg.className = "campaign-warnings-ok";
+    okMsg.textContent = "✓ No deliverability flags";
+    card.appendChild(okMsg);
+  }
+
   const copyBtn = document.createElement("button");
+  
   copyBtn.className = "campaign-copy-btn";
   copyBtn.textContent = "Copy full campaign";
   copyBtn.addEventListener("click", () => {
