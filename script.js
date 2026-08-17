@@ -689,7 +689,13 @@ async function handleSend(event) {
     const result = await callGroqAPI(session.messages, mode);
 
     if (mode === "campaign") {
-      session.messages.push({ role: "assistant", content: result.campaign, warnings: result.warnings, kind: "campaign" });
+      session.messages.push({
+        role: "assistant",
+        content: campaignToText(result.campaign),
+        campaignData: result.campaign,
+        warnings: result.warnings,
+        kind: "campaign"
+      });
       saveUserData();
       renderActiveChat();
     } else {
@@ -833,7 +839,7 @@ function renderActiveChat(options = {}) {
 
   session.messages.forEach((msg, index) => {
     if (msg.kind === "campaign") {
-      addCampaignCardToDOM(msg.content, msg.warnings);
+      addCampaignCardToDOM(msg.campaignData, msg.warnings);
       return;
     }
     const role = msg.role === "user" ? "user" : "assistant";
@@ -940,6 +946,19 @@ function addCampaignCardToDOM(campaign, warnings) {
   card.appendChild(campaignField("Preheader", campaign.preheader));
   card.appendChild(campaignField("Body", campaign.body, true));
   card.appendChild(campaignField("Call to action", campaign.cta_text));
+
+function campaignToText(campaign) {
+  return [
+    "Subject line options:",
+    ...(campaign.subject_lines || []).map((s) => "- " + s),
+    "",
+    "Preheader: " + (campaign.preheader || ""),
+    "",
+    campaign.body || "",
+    "",
+    "CTA: " + (campaign.cta_text || "")
+  ].join("\n");
+}
 
   if (warnings && warnings.length > 0) {
     const warnSection = document.createElement("div");
