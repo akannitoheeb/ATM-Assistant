@@ -52,6 +52,25 @@ if the user's own message includes emoji, or in the rare moment a touch of
 humor or genuine sympathy calls for it.
 `.trim();
 
+const CAMPAIGN_SCHEMA = {
+  type: "json_schema",
+  json_schema: {
+    name: "email_campaign",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        subject_lines: { type: "array", items: { type: "string" } },
+        preheader: { type: "string" },
+        body: { type: "string" },
+        cta_text: { type: "string" }
+      },
+      required: ["subject_lines", "preheader", "body", "cta_text"],
+      additionalProperties: false
+    }
+  }
+};
+
 function buildSystemInstruction(settings = {}) {
   const parts = [BASE_INSTRUCTION];
 
@@ -266,7 +285,7 @@ module.exports = async function (req, res) {
   }
 
   try {
-    const { messages, settings } = req.body;
+    const { messages, settings, mode } = req.body;
     const apiKey = process.env.GROQ_API_KEY;
 
     if (!apiKey) {
@@ -287,7 +306,8 @@ module.exports = async function (req, res) {
           { role: "system", content: buildSystemInstruction(settings) },
           ...messages
         ],
-        ...(usingTextModel ? { reasoning_format: "hidden" } : {})
+        ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
+        ...(mode === "campaign" ? { response_format: CAMPAIGN_SCHEMA } : {})
       })
     });
 
@@ -299,6 +319,12 @@ module.exports = async function (req, res) {
     }
 
     const rawReply = data.choices?.[0]?.message?.content || "";
+
+    if (mode === "campaign") {
+      const campaign = JSON.parse(rawReply);
+      return res.status(200).json({ campaign });
+    }
+
     const reply = stripThinkingBlock(rawReply);
     return res.status(200).json({ reply });
 
