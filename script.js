@@ -40,6 +40,8 @@ const newChatBtn = document.getElementById("newChatBtn");
 const historyList = document.getElementById("historyList");
 const historySearchInput = document.getElementById("historySearchInput");
 let historyFilter = "";
+const campaignModeBtn = document.getElementById("campaignModeBtn");
+let campaignMode = false;
 
 historySearchInput.addEventListener("input", () => {
   historyFilter = historySearchInput.value.trim().toLowerCase();
@@ -76,6 +78,23 @@ popupSettingsBtn.addEventListener("click", () => {
   closeAccountPopup();
   settingsBtn.click();
 });
+
+campaignModeBtn.addEventListener("click", () => {
+  campaignMode = !campaignMode;
+  campaignModeBtn.classList.toggle("active", campaignMode);
+  campaignModeBtn.setAttribute("aria-pressed", String(campaignMode));
+  userInput.placeholder = campaignMode
+    ? "Describe the campaign — audience, goal, offer…"
+    : "Message ATM Assistant…";
+});
+
+function resetCampaignMode() {
+  campaignMode = false;
+  campaignModeBtn.classList.remove("active");
+  campaignModeBtn.setAttribute("aria-pressed", "false");
+  userInput.placeholder = "Message ATM Assistant…";
+}
+
 const settingsOverlay = document.getElementById("settingsOverlay");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
 const saveSettingsBtn = document.getElementById("saveSettingsBtn");
@@ -633,18 +652,24 @@ async function handleSend(event) {
   setLoading(true);
   addTypingIndicator();
 
+  const mode = campaignMode ? "campaign" : undefined;
+
   try {
-    const reply = await callGroqAPI(session.messages);
-    session.messages.push({ role: "assistant", content: reply });
-    saveUserData();
-    renderActiveChat({ typeLast: true });
+    const result = await callGroqAPI(session.messages, mode);
+
+    if (mode === "campaign") {
+      session.messages.push({ role: "assistant", content: result, kind: "campaign" });
+      saveUserData();
+      renderActiveChat();
+    } else {
+      session.messages.push({ role: "assistant", content: result });
+      saveUserData();
+      renderActiveChat({ typeLast: true });
+    }
   } catch (error) {
     console.error(error);
 
     if (error.code === "GUEST_LIMIT") {
-      // Don't show this as a chat error bubble — remove the user's
-      // message from the guest's in-memory session and open the
-      // signup modal instead, since guests can't retry today anyway.
       session.messages.pop();
       renderActiveChat();
       openAuthModal();
@@ -654,19 +679,21 @@ async function handleSend(event) {
     }
   } finally {
     setLoading(false);
+    resetCampaignMode();
   }
 }
 
 // --------------------------------------------------------------
 // API call
 // --------------------------------------------------------------
-async function callGroqAPI(messages) {
+
+  async function callGroqAPI(messages, mode) {
   const authHeaders = await getAuthHeaders();
 
   const response = await fetch(CHAT_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders },
-    body: JSON.stringify({ messages, settings })
+    body: JSON.stringify({ messages, settings, mode })
   });
 
   const data = await response.json();
@@ -677,10 +704,12 @@ async function callGroqAPI(messages) {
     throw err;
   }
 
-  if (!data.reply) {
-    throw new Error("No text returned from the API.");
+  if (mode === "campaign") {
+    if (!data.campaign) throw new Error("No campaign data returned from the API.");
+    return data.campaign;
   }
 
+  if (!data.reply) throw new Error("No text returned from the API.");
   return data.reply.trim();
 }
 
@@ -772,6 +801,10 @@ function renderActiveChat(options = {}) {
   chatLog.innerHTML = "";
 
   session.messages.forEach((msg, index) => {
+    if (msg.kind === "campaign") {
+      addCampaignCardToDOM(msg.content);
+      return;
+    }
     const role = msg.role === "user" ? "user" : "assistant";
     const isLast = index === session.messages.length - 1;
     const shouldType = Boolean(options.typeLast) && isLast && role === "assistant";
@@ -840,6 +873,82 @@ function addMessageToDOM(content, kind, animate = false) {
   wrapper.appendChild(avatar);
   wrapper.appendChild(body);
   chatLog.appendChild(wrapper);
+}
+
+function addCampaignCardToDOM(campaign) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "message assistant";
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = "✉";
+
+  const body = document.createElement("div");
+  body.className = "message-body";
+
+  const card = document.createElement("div");
+  card.className = "campaign-card";
+
+  const subjectSection = document.createElement("div");
+  subjectSection.className = "campaign-section";
+  const subjectLabel = document.createElement("div");
+  subjectLabel.className = "campaign-label";
+  subjectLabel.textContent = "Subject lines";
+  subjectSection.appendChild(subjectLabel);
+
+  const subjectList = document.createElement("ul");
+  subjectList.className = "campaign-subject-list";
+  (campaign.subject_lines || []).forEach((s) => {
+    const li = document.createElement("li");
+    li.textContent = s;
+    subjectList.appendChild(li);
+  });
+  subjectSection.appendChild(subjectList);
+  card.appendChild(subjectSection);
+
+  card.appendChild(campaignField("Preheader", campaign.preheader));
+  card.appendChild(campaignField("Body", campaign.body, true));
+  card.appendChild(campaignField("Call to action", campaign.cta_text));
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "campaign-copy-btn";
+  copyBtn.textContent = "Copy full campaign";
+  copyBtn.addEventListener("click", () => {
+    const fullText = [
+      "Subject line options:",
+      ...(campaign.subject_lines || []).map((s) => "- " + s),
+      "",
+      "Preheader: " + (campaign.preheader || ""),
+      "",
+      campaign.body || "",
+      "",
+      "CTA: " + (campaign.cta_text || "")
+    ].join("\n");
+    navigator.clipboard.writeText(fullText);
+    copyBtn.textContent = "Copied";
+    setTimeout(() => { copyBtn.textContent = "Copy full campaign"; }, 1200);
+  });
+  card.appendChild(copyBtn);
+
+  body.appendChild(card);
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(body);
+  chatLog.appendChild(wrapper);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function campaignField(label, value, isBody = false) {
+  const section = document.createElement("div");
+  section.className = "campaign-section";
+  const labelEl = document.createElement("div");
+  labelEl.className = "campaign-label";
+  labelEl.textContent = label;
+  const valueEl = document.createElement("div");
+  valueEl.className = isBody ? "campaign-body-text" : "campaign-value";
+  valueEl.textContent = value || "";
+  section.appendChild(labelEl);
+  section.appendChild(valueEl);
+  return section;
 }
 
 function typeWriterEffect(el, fullText, speedMs = 16) {
