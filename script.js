@@ -49,6 +49,8 @@ const historySearchInput = document.getElementById("historySearchInput");
 let historyFilter = "";
 const campaignModeBtn = document.getElementById("campaignModeBtn");
 let campaignMode = false;
+const landingPageBtn = document.getElementById("landingPageBtn");
+let includeLandingPage = false;
 
 historySearchInput.addEventListener("input", () => {
   historyFilter = historySearchInput.value.trim().toLowerCase();
@@ -90,15 +92,25 @@ campaignModeBtn.addEventListener("click", () => {
   campaignMode = !campaignMode;
   campaignModeBtn.classList.toggle("active", campaignMode);
   campaignModeBtn.setAttribute("aria-pressed", String(campaignMode));
+  landingPageBtn.classList.toggle("hidden", !campaignMode);
   userInput.placeholder = campaignMode
     ? "Describe the campaign — audience, goal, offer…"
     : "Message ATM Assistant…";
 });
 
+landingPageBtn.addEventListener("click", () => {
+  includeLandingPage = !includeLandingPage;
+  landingPageBtn.classList.toggle("active", includeLandingPage);
+  landingPageBtn.setAttribute("aria-pressed", String(includeLandingPage));
+});
+
 function resetCampaignMode() {
   campaignMode = false;
+  includeLandingPage = false;
   campaignModeBtn.classList.remove("active");
   campaignModeBtn.setAttribute("aria-pressed", "false");
+  landingPageBtn.classList.remove("active", "hidden");
+  landingPageBtn.setAttribute("aria-pressed", "false");
   userInput.placeholder = "Message ATM Assistant…";
 }
 
@@ -730,7 +742,7 @@ async function handleSend(event) {
   const response = await fetch(CHAT_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders },
-    body: JSON.stringify({ messages, settings, mode })
+    body: JSON.stringify({ messages, settings, mode, includeLandingPage: mode === "campaign" ? includeLandingPage : undefined })
   });
 
   const data = await response.json();
@@ -913,7 +925,7 @@ function addMessageToDOM(content, kind, animate = false) {
 }
 
 function campaignToText(campaign) {
-  return [
+  const parts = [
     "Subject line options:",
     ...(campaign.subject_lines || []).map((s) => "- " + s),
     "",
@@ -922,7 +934,23 @@ function campaignToText(campaign) {
     campaign.body || "",
     "",
     "CTA: " + (campaign.cta_text || "")
-  ].join("\n");
+  ];
+
+  if (campaign.landing_page) {
+    const lp = campaign.landing_page;
+    parts.push(
+      "",
+      "--- Landing page ---",
+      "Headline: " + (lp.headline || ""),
+      "Subheadline: " + (lp.subheadline || ""),
+      "",
+      ...(lp.sections || []),
+      "",
+      "Landing page CTA: " + (lp.landing_cta_text || "")
+    );
+  }
+
+  return parts.join("\n");
 }
 
 function addCampaignCardToDOM(campaign, warnings) {
@@ -958,7 +986,20 @@ function addCampaignCardToDOM(campaign, warnings) {
 
   card.appendChild(campaignField("Preheader", campaign.preheader));
   card.appendChild(campaignField("Body", campaign.body, true));
-  card.appendChild(campaignField("Call to action", campaign.cta_text));
+card.appendChild(campaignField("Call to action", campaign.cta_text));
+
+  if (campaign.landing_page) {
+    const lp = campaign.landing_page;
+    const lpDivider = document.createElement("div");
+    lpDivider.className = "campaign-lp-divider";
+    lpDivider.textContent = "Landing page";
+    card.appendChild(lpDivider);
+
+    card.appendChild(campaignField("Headline", lp.headline));
+    card.appendChild(campaignField("Subheadline", lp.subheadline));
+    card.appendChild(campaignField("Page sections", (lp.sections || []).join("\n\n"), true));
+    card.appendChild(campaignField("Landing page CTA", lp.landing_cta_text));
+  }
 
   if (warnings && warnings.length > 0) {
     const warnSection = document.createElement("div");
@@ -989,17 +1030,8 @@ function addCampaignCardToDOM(campaign, warnings) {
   copyBtn.className = "campaign-copy-btn";
   copyBtn.textContent = "Copy full campaign";
   copyBtn.addEventListener("click", () => {
-    const fullText = [
-      "Subject line options:",
-      ...(campaign.subject_lines || []).map((s) => "- " + s),
-      "",
-      "Preheader: " + (campaign.preheader || ""),
-      "",
-      campaign.body || "",
-      "",
-      "CTA: " + (campaign.cta_text || "")
-    ].join("\n");
-    navigator.clipboard.writeText(fullText);
+    navigator.clipboard.writeText(campaignToText(campaign));
+
     copyBtn.textContent = "Copied";
     setTimeout(() => { copyBtn.textContent = "Copy full campaign"; }, 1200);
   });
