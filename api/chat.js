@@ -71,6 +71,12 @@ const CAMPAIGN_SCHEMA = {
   }
 };
 
+const CAMPAIGN_INSTRUCTION = `
+The user wants a complete email marketing campaign. Fill subject_lines with
+2-3 distinct options, write a compelling preheader, a complete email body
+(use \\n for line breaks), and a clear, specific call-to-action.
+`.trim();
+
 function buildSystemInstruction(settings = {}) {
   const parts = [BASE_INSTRUCTION];
 
@@ -303,7 +309,10 @@ module.exports = async function (req, res) {
       body: JSON.stringify({
         model: usingTextModel ? TEXT_MODEL : VISION_MODEL,
         messages: [
-          { role: "system", content: buildSystemInstruction(settings) },
+          {
+            role: "system",
+            content: buildSystemInstruction(settings) + (mode === "campaign" ? "\n\n" + CAMPAIGN_INSTRUCTION : "")
+          },
           ...messages
         ],
         ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
