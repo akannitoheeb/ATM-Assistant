@@ -532,11 +532,29 @@ document.querySelectorAll(".currency-btn").forEach((btn) => {
       });
       const data = await response.json();
 
-      if (!response.ok || !data.link) {
+      if (!response.ok || !data.reference) {
         throw new Error(data.error || "Could not start payment.");
       }
 
-      window.location.href = data.link;
+      window.Korapay.initialize({
+        key: data.publicKey,
+        reference: data.reference,
+        amount: data.amount,
+        currency: data.currency,
+        customer: { email: data.email },
+        onClose: () => {
+          document.querySelectorAll(".currency-btn").forEach((b) => (b.disabled = false));
+        },
+        onSuccess: () => {
+          upgradeOverlay.classList.add("hidden");
+          alert("Payment received! Your Pro plan will activate within a minute or two.");
+        },
+        onFailed: () => {
+          upgradeError.textContent = "Payment failed or was cancelled. Please try again.";
+          upgradeError.classList.remove("hidden");
+          document.querySelectorAll(".currency-btn").forEach((b) => (b.disabled = false));
+        }
+      });
     } catch (error) {
       upgradeError.textContent = error.message;
       upgradeError.classList.remove("hidden");
