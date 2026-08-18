@@ -463,6 +463,7 @@ async function onLogin(user) {
 
   guestBlock.classList.add("hidden");
   accountBlock.classList.remove("hidden");
+  upgradeBtn.classList.remove("hidden");
 
   // Was this account created moments ago? Covers Google sign-in, which
   // has no separate "signup" button to hook into like the email form does.
