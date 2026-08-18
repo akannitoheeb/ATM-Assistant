@@ -8,7 +8,7 @@
 // Requires these Vercel environment variables:
 //   FLW_SECRET_KEY   — Flutterwave secret key (Test or Live)
 //   FLW_PLAN_ID_NGN  — Payment Plan ID for the ₦8,000/mo plan
-//   FLW_PLAN_ID_USD  — Payment Plan ID for the $5/mo plan
+//   FLW_PLAN_ID_USD  — Payment Plan ID for the $9/mo plan
 // ============================================================
 
 const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
@@ -31,7 +31,7 @@ async function verifySupabaseToken(authHeader) {
 
 const PLAN_CONFIG = {
   NGN: { amount: "8000", planId: process.env.FLW_PLAN_ID_NGN || "167115" },
-  USD: { amount: "5", planId: process.env.FLW_PLAN_ID_USD || "167115" }
+  USD: { amount: "9", planId: process.env.FLW_PLAN_ID_USD || "167115" }
 };
 
 module.exports = async function (req, res) {
