@@ -80,6 +80,7 @@ module.exports = async function (req, res) {
     });
 
     const data = await flwResponse.json();
+    console.log("Flutterwave response:", JSON.stringify(data));
 
     if (data.status !== "success") {
       console.error("Flutterwave error:", JSON.stringify(data));
