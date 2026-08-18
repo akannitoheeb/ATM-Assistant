@@ -533,29 +533,12 @@ document.querySelectorAll(".currency-btn").forEach((btn) => {
       });
       const data = await response.json();
 
-      if (!response.ok || !data.reference) {
+      if (!response.ok || !data.link) {
         throw new Error(data.error || "Could not start payment.");
       }
 
-      window.Korapay.initialize({
-        key: data.publicKey,
-        reference: data.reference,
-        amount: data.amount,
-        currency: data.currency,
-        customer: { email: data.email },
-        onClose: () => {
-          document.querySelectorAll(".currency-btn").forEach((b) => (b.disabled = false));
-        },
-        onSuccess: () => {
-          upgradeOverlay.classList.add("hidden");
-          alert("Payment received! Your Pro plan will activate within a minute or two.");
-        },
-        onFailed: () => {
-          upgradeError.textContent = "Payment failed or was cancelled. Please try again.";
-          upgradeError.classList.remove("hidden");
-          document.querySelectorAll(".currency-btn").forEach((b) => (b.disabled = false));
-        }
-      });
+      // Flutterwave hosts the checkout — just send the user there.
+      window.location.href = data.link;
     } catch (error) {
       upgradeError.textContent = error.message;
       upgradeError.classList.remove("hidden");
@@ -563,7 +546,6 @@ document.querySelectorAll(".currency-btn").forEach((btn) => {
     }
   });
 });
-
 // Attaches the logged-in user's access token to a request, so our
 // chat function knows who's asking. Guests send no auth header at all.
 async function getAuthHeaders() {
