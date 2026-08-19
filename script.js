@@ -384,53 +384,39 @@ authForm.addEventListener("submit", async (event) => {
       notifyBrevoSignup(email, "");
     }
     
-    // Add this near your other auth-related code in script.js,
-// after you've set up the authForm submit handler.
+// --------------------------------------------------------------
+// Forgot password
+// --------------------------------------------------------------
+const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
 
-const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
-const authEmailInput = document.getElementById('authEmail');
-const authErrorEl = document.getElementById('authError');
-
-forgotPasswordBtn?.addEventListener('click', async () => {
-  const email = authEmailInput.value.trim();
+forgotPasswordBtn?.addEventListener("click", async () => {
+  const email = authEmail.value.trim();
 
   if (!email) {
-    authErrorEl.textContent = 'Enter your email above first, then tap "Forgot password?"';
-    authErrorEl.classList.remove('hidden');
-    authEmailInput.focus();
+    authError.textContent = 'Enter your email above first, then tap "Forgot password?"';
+    authError.classList.remove("hidden");
+    authEmail.focus();
     return;
   }
 
   forgotPasswordBtn.disabled = true;
-  forgotPasswordBtn.textContent = 'Sending...';
+  forgotPasswordBtn.textContent = "Sending...";
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: 'https://assistant.toheebakanni.name.ng/reset-password.html'
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: "https://assistant.toheebakanni.name.ng/reset-password.html"
   });
 
   forgotPasswordBtn.disabled = false;
-  forgotPasswordBtn.textContent = 'Forgot password?';
+  forgotPasswordBtn.textContent = "Forgot password?";
 
   if (error) {
-    authErrorEl.textContent = error.message;
-    authErrorEl.classList.remove('hidden');
-  } else {
-    authErrorEl.textContent = 'Check your email for a password reset link.';
-    authErrorEl.classList.remove('hidden');
-    authErrorEl.style.color = '#4CAF50'; // green, since this is a success message not an error
-  }
-});
-    
-    // On success, onAuthStateChange (below) handles showing the app
-    // and closes the modal via onLogin().
-  } catch (error) {
     authError.textContent = friendlyAuthError(error.message);
     authError.classList.remove("hidden");
-    authForm.classList.add("shake");
-    upgradeBtn.classList.remove("hidden");
-    setTimeout(() => authForm.classList.remove("shake"), 400);
-  } finally {
-    authSubmitBtn.disabled = false;
+    authError.style.color = "#E0765A";
+  } else {
+    authError.textContent = "Check your email for a password reset link.";
+    authError.classList.remove("hidden");
+    authError.style.color = "#7DB88A";
   }
 });
 
