@@ -124,23 +124,16 @@
           <form id="authForm" class="auth-form">
             <input type="email" id="authEmail" placeholder="Email" required autocomplete="email" />
 
-            <div class="password-field">
+           <div class="password-field">
               <input type="password" id="authPassword" placeholder="Password" required autocomplete="current-password" />
               <button type="button" id="togglePasswordBtn" class="toggle-password" aria-label="Show password">
                 <svg class="eye-icon eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7.5 11-7.5 11 7.5 11 7.5-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
                 <svg class="eye-icon eye-closed hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19.5C5 19.5 1 12 1 12a20.6 20.6 0 0 1 5.06-5.94M9.9 4.74A10.5 10.5 0 0 1 12 4.5c7 0 11 7.5 11 7.5a20.6 20.6 0 0 1-3.22 4.36M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
               </button>
             </div>
-
-<div class="password-field">
-  <input type="password" id="authPassword" placeholder="Password" required autocomplete="current-password" />
-  <button type="button" id="togglePasswordBtn" class="toggle-password" aria-label="Show password">
-    <!-- existing eye icons stay as-is -->
-  </button>
-</div>
-<p class="forgot-password-row">
-  <button type="button" id="forgotPasswordBtn" class="link-btn">Forgot password?</button>
-</p>
+            <p class="forgot-password-row">
+              <button type="button" id="forgotPasswordBtn" class="link-btn">Forgot password?</button>
+            </p>
 
             <button type="submit" id="authSubmitBtn" class="login-btn">Log in</button>
           </form>
