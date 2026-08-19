@@ -383,7 +383,20 @@ authForm.addEventListener("submit", async (event) => {
     if (wasSignup) {
       notifyBrevoSignup(email, "");
     }
-    
+
+    // On success, onAuthStateChange (below) handles showing the app
+    // and closes the modal via onLogin().
+  } catch (error) {
+    authError.textContent = friendlyAuthError(error.message);
+    authError.classList.remove("hidden");
+    authForm.classList.add("shake");
+    upgradeBtn.classList.remove("hidden");
+    setTimeout(() => authForm.classList.remove("shake"), 400);
+  } finally {
+    authSubmitBtn.disabled = false;
+  }
+});
+
 // --------------------------------------------------------------
 // Forgot password
 // --------------------------------------------------------------
