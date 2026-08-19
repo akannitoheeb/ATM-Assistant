@@ -1459,6 +1459,15 @@ body {
     transform: translateX(0);
   }
 
+  .campaign-mode-btn {
+    padding: 0 8px;
+    font-size: 11.5px;
+  }
+
+  .campaign-mode-btn .icon-text {
+    display: none;
+  }
+
   /* Dark backdrop behind the open sidebar — tapping it closes the menu */
   .sidebar-backdrop {
     display: block;
