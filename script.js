@@ -383,6 +383,44 @@ authForm.addEventListener("submit", async (event) => {
     if (wasSignup) {
       notifyBrevoSignup(email, "");
     }
+    
+    // Add this near your other auth-related code in script.js,
+// after you've set up the authForm submit handler.
+
+const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
+const authEmailInput = document.getElementById('authEmail');
+const authErrorEl = document.getElementById('authError');
+
+forgotPasswordBtn?.addEventListener('click', async () => {
+  const email = authEmailInput.value.trim();
+
+  if (!email) {
+    authErrorEl.textContent = 'Enter your email above first, then tap "Forgot password?"';
+    authErrorEl.classList.remove('hidden');
+    authEmailInput.focus();
+    return;
+  }
+
+  forgotPasswordBtn.disabled = true;
+  forgotPasswordBtn.textContent = 'Sending...';
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: 'https://assistant.toheebakanni.name.ng/reset-password.html'
+  });
+
+  forgotPasswordBtn.disabled = false;
+  forgotPasswordBtn.textContent = 'Forgot password?';
+
+  if (error) {
+    authErrorEl.textContent = error.message;
+    authErrorEl.classList.remove('hidden');
+  } else {
+    authErrorEl.textContent = 'Check your email for a password reset link.';
+    authErrorEl.classList.remove('hidden');
+    authErrorEl.style.color = '#4CAF50'; // green, since this is a success message not an error
+  }
+});
+    
     // On success, onAuthStateChange (below) handles showing the app
     // and closes the modal via onLogin().
   } catch (error) {
