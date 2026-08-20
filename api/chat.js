@@ -11,6 +11,15 @@
 //   4. Per-IP guest limit (1/day) — existing
 //   5. Per-user limit — 25/day free, 200/day Pro (checked via the
 //      subscriptions table)
+//
+// Web search (new): when the client sends webSearch: true on a
+// normal (non-campaign) message, we call Tavily's search API first
+// with the user's latest message as the query, and feed the results
+// into the system prompt as grounding context before calling Groq.
+// Requires a TAVILY_API_KEY env var — get a free key at tavily.com.
+// If that key is missing, or the search call fails for any reason,
+// we silently fall back to answering without search rather than
+// failing the whole request.
 // ============================================================
 
 const TEXT_MODEL = "openai/gpt-oss-120b";
@@ -33,6 +42,78 @@ function totalMessageChars(messages) {
       : (msg.content || "");
     return sum + text.length;
   }, 0);
+}
+
+function getLatestUserText(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "user") continue;
+    return Array.isArray(msg.content)
+      ? (msg.content.find((p) => p.type === "text")?.text || "")
+      : (msg.content || "");
+  }
+  return "";
+}
+
+// --------------------------------------------------------------
+// Web search — Tavily
+// --------------------------------------------------------------
+async function performWebSearch(query) {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey || !query || !query.trim()) return null;
+
+  try {
+    const response = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: apiKey,
+        query: query.slice(0, 400),
+        search_depth: "basic",
+        max_results: 5,
+        include_answer: false
+      })
+    });
+
+    if (!response.ok) {
+      console.error("Tavily search error:", response.status, await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    const results = Array.isArray(data.results) ? data.results : [];
+    if (results.length === 0) return null;
+
+    return results
+      .filter((r) => r.url && r.title)
+      .slice(0, 5)
+      .map((r) => ({
+        title: r.title,
+        url: r.url,
+        content: (r.content || "").slice(0, 1200)
+      }));
+  } catch (error) {
+    console.error("Tavily search failed:", error.message);
+    return null;
+  }
+}
+
+function buildSearchContextBlock(results) {
+  const today = new Date().toISOString().slice(0, 10);
+  const entries = results
+    .map((r, i) => `[${i + 1}] ${r.title} (${r.url})\n${r.content}`)
+    .join("\n\n");
+
+  return `
+Today's date is ${today}. The following are live web search results relevant
+to the user's latest message. Use them to ground your answer in current,
+accurate information — prefer them over anything you might otherwise assume
+about recent events, prices, or current status. Don't dump raw excerpts;
+summarize and synthesize in your own words. If the results don't actually
+answer the question, say so rather than guessing.
+
+${entries}
+`.trim();
 }
 
 const BASE_INSTRUCTION = `
@@ -385,7 +466,7 @@ module.exports = async function (req, res) {
   }
 
   try {
-    const { messages, settings, mode, includeLandingPage } = req.body;
+    const { messages, settings, mode, includeLandingPage, webSearch } = req.body;
     const apiKey = process.env.GROQ_API_KEY;
 
     if (!apiKey) {
@@ -393,6 +474,21 @@ module.exports = async function (req, res) {
     }
 
     const usingTextModel = !conversationHasImage(messages);
+
+    // Only search for normal chat, never for campaign mode (campaign
+    // replies are structured JSON, not a place to splice search context).
+    let searchResults = null;
+    if (mode !== "campaign" && webSearch) {
+      const query = getLatestUserText(messages);
+      searchResults = await performWebSearch(query);
+    }
+
+    const systemContent = [
+      buildSystemInstruction(settings),
+      mode === "campaign" ? CAMPAIGN_INSTRUCTION : "",
+      mode === "campaign" && includeLandingPage ? LANDING_PAGE_INSTRUCTION : "",
+      searchResults ? buildSearchContextBlock(searchResults) : ""
+    ].filter(Boolean).join("\n\n");
 
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -403,12 +499,7 @@ module.exports = async function (req, res) {
       body: JSON.stringify({
         model: usingTextModel ? TEXT_MODEL : VISION_MODEL,
         messages: [
-          {
-            role: "system",
-            content: buildSystemInstruction(settings)
-              + (mode === "campaign" ? "\n\n" + CAMPAIGN_INSTRUCTION : "")
-              + (mode === "campaign" && includeLandingPage ? "\n\n" + LANDING_PAGE_INSTRUCTION : "")
-          },
+          { role: "system", content: systemContent },
           ...messages
         ],
         ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
@@ -434,7 +525,11 @@ module.exports = async function (req, res) {
     }
 
     const reply = stripThinkingBlock(rawReply);
-    return res.status(200).json({ reply });
+    const sources = searchResults
+      ? searchResults.map((r) => ({ title: r.title, url: r.url }))
+      : [];
+
+    return res.status(200).json({ reply, sources });
 
   } catch (error) {
     return res.status(500).json({ error: "Server error: " + error.message });
