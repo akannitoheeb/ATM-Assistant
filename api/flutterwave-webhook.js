@@ -48,8 +48,8 @@ module.exports = async function (req, res) {
     console.log("Webhook: RAW body ->", JSON.stringify(event));
     console.log("Webhook: received event", event?.event, "status:", event?.data?.status);
 
-    if (event.event === "charge.completed" && event.data?.status === "successful") {
-      const txId = event.data.id;
+    if (event.status === "successful" && event.id) {
+      const txId = event.id;
 
       // Never trust the webhook payload alone - verify directly
       // with Flutterwave using our secret key.
