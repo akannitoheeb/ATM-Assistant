@@ -566,6 +566,7 @@ async function onLogin(user) {
   }
 
   await loadUserData();
+  await checkSubscriptionStatus();
   activeProjectId = null;
   activeProjectLabel.textContent = "General";
   applySettingsToForm();
@@ -665,6 +666,58 @@ async function loadUserData() {
     console.error("Failed to load data:", error);
     sessions = [];
     settings = defaultSettings();
+  }
+}
+
+// --------------------------------------------------------------
+// Reflect Pro status in the UI — checks the subscriptions table
+// (the one flutterwave-webhook.js writes to after a successful
+// payment) and updates the sidebar button + upgrade modal to match.
+// --------------------------------------------------------------
+async function checkSubscriptionStatus() {
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data: sub, error } = await supabaseClient
+      .from("subscriptions")
+      .select("plan, status, current_period_end")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    const isActivePro =
+      sub &&
+      sub.plan === "pro" &&
+      sub.status === "active" &&
+      sub.current_period_end &&
+      new Date(sub.current_period_end) > new Date();
+
+    applyProStatusToUI(isActivePro);
+  } catch (error) {
+    console.error("Failed to check subscription status:", error);
+    // Fail safe: treat as free rather than silently claiming Pro.
+    applyProStatusToUI(false);
+  }
+}
+
+function applyProStatusToUI(isActivePro) {
+  if (isActivePro) {
+    // Already Pro — no need to dangle the upgrade prompt in front of them.
+    upgradeBtn.classList.add("hidden");
+
+    // If they ever open the modal via another path, make sure it
+    // reflects reality instead of showing Free as current and Pro
+    // as purchasable again.
+    const freeBtn = document.querySelector(".plan-card:not(.plan-card-pro) .plan-btn");
+    const proCurrencyChoice = document.querySelector(".plan-card-pro .currency-choice");
+    if (freeBtn) {
+      freeBtn.textContent = "Included in Pro";
+    }
+    if (proCurrencyChoice) {
+      proCurrencyChoice.innerHTML = '<button type="button" class="plan-btn plan-btn-current" disabled>Your current plan</button>';
+    }
+  } else if (!isGuest) {
+    upgradeBtn.classList.remove("hidden");
   }
 }
 
