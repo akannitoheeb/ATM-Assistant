@@ -35,8 +35,14 @@
 
   <div class="app" id="appRoot">
 
-    <!-- Only visible on small screens — opens the sidebar -->
-    <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open menu">☰</button>
+    <!-- Sidebar toggle — visible on desktop and mobile now.
+         Desktop: collapses the sidebar in place.
+         Mobile: slides it off-canvas. -->
+    <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Toggle sidebar">☰</button>
+
+    <!-- Small floating tab shown only when the sidebar is collapsed
+         on desktop, so there's always a way to bring it back. -->
+    <button id="sidebarReopenBtn" class="sidebar-reopen-btn hidden" aria-label="Open sidebar">☰</button>
 
     <!-- Only visible on small screens when sidebar is open — tap to close -->
     <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
@@ -282,10 +288,52 @@
       <div id="chatLog" class="chat-log"></div>
 
       <form id="chatForm" class="chat-input-row">
-       <button type="button" id="attachBtn" class="attach-btn" aria-label="Attach file">+</button>
-       <button type="button" id="campaignModeBtn" class="campaign-mode-btn" aria-pressed="false" aria-label="Generate email campaign">✉</button>
-       <button type="button" id="landingPageBtn" class="campaign-mode-btn landing-page-btn hidden" aria-pressed="false" aria-label="Include landing page">🌐</button>
-      <input type="file" id="fileInput" accept="image/*,.txt,.md,.csv" hidden />
+        <!-- Single "+" button opens a labeled menu — same pattern as
+             Claude's attach menu — instead of a row of unlabeled icons. -->
+        <button type="button" id="toolsBtn" class="tools-btn" aria-haspopup="true" aria-expanded="false" aria-label="Tools">+</button>
+
+        <div id="toolsPopup" class="tools-popup hidden">
+          <button type="button" id="toolsAttachItem" class="tools-popup-item">
+            <span class="popup-icon">📎</span>
+            <span class="tools-popup-item-text">
+              Attach file
+              <span class="tools-popup-item-hint">Image or text file</span>
+            </span>
+          </button>
+
+          <div class="tools-popup-divider"></div>
+
+          <button type="button" id="toolsCampaignItem" class="tools-popup-item" aria-pressed="false">
+            <span class="popup-icon">✉</span>
+            <span class="tools-popup-item-text">
+              Campaign mode
+              <span class="tools-popup-item-hint">Generate a structured email campaign</span>
+            </span>
+            <span class="tools-popup-check">✓</span>
+          </button>
+
+          <button type="button" id="toolsLandingItem" class="tools-popup-item hidden" aria-pressed="false">
+            <span class="popup-icon">🌐</span>
+            <span class="tools-popup-item-text">
+              Include landing page
+              <span class="tools-popup-item-hint">Adds a matching landing page draft</span>
+            </span>
+            <span class="tools-popup-check">✓</span>
+          </button>
+
+          <div class="tools-popup-divider"></div>
+
+          <button type="button" id="toolsWebSearchItem" class="tools-popup-item" aria-pressed="false">
+            <span class="popup-icon">🔎</span>
+            <span class="tools-popup-item-text">
+              Web search
+              <span class="tools-popup-item-hint">Look up current marketing news before replying</span>
+            </span>
+            <span class="tools-popup-check">✓</span>
+          </button>
+        </div>
+
+        <input type="file" id="fileInput" accept="image/*,.txt,.md,.csv" hidden />
         <div class="input-stack">
           <div id="attachmentPreview" class="attachment-preview hidden"></div>
           <textarea
@@ -301,6 +349,6 @@
 
   </div>
 
-  <script src="script.js?v=12"></script>
+  <script src="script.js?v=13"></script>
 </body>
 </html>

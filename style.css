@@ -52,10 +52,31 @@ body {
   /* extra bottom padding respects the iPhone home-indicator / Safari toolbar
      so "Log out" never sits underneath it */
   padding: 16px 12px calc(16px + env(safe-area-inset-bottom)) 12px;
+  transition: width 0.18s ease, padding 0.18s ease, border-color 0.18s ease;
+  overflow: hidden;
+}
+
+/* Desktop collapsed state — width collapses to 0 instead of sliding
+   off-canvas, since on desktop there's no backdrop overlay covering
+   the rest of the app. Content is still in the DOM, just clipped. */
+.sidebar.collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-right-color: transparent;
 }
 
 .sidebar-top {
   flex-shrink: 0;
+  width: 216px; /* matches sidebar inner width so content doesn't reflow while collapsing */
+}
+
+.chat-history {
+  width: 216px;
+}
+
+.sidebar-bottom {
+  width: 216px;
 }
 
 .brand {
@@ -896,6 +917,36 @@ body {
   position: relative;
 }
 
+/* Small floating tab to re-open a collapsed sidebar on desktop —
+   sits where the sidebar used to be, so it reads as "pull this
+   back out" rather than a random button. */
+.sidebar-reopen-btn {
+  position: fixed;
+  top: 16px;
+  left: 12px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 15;
+}
+
+.sidebar-reopen-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.sidebar-reopen-btn.hidden {
+  display: none;
+}
+
 /* Empty state, centered */
 .greeting-state {
   flex: 1;
@@ -964,6 +1015,10 @@ body {
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
+  /* Lets the browser handle scroll momentum independently of any
+     script-driven scrollTop writes happening elsewhere on the page —
+     part of the "scroll up while typing" fix. */
+  overscroll-behavior: contain;
 }
 
 .chat-log.hidden {
@@ -1125,6 +1180,40 @@ body {
   display: block;
 }
 
+/* Sources row under a web-search-backed reply */
+.sources-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.sources-label {
+  font-size: 11px;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.source-chip {
+  font-size: 12px;
+  color: var(--gold);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  text-decoration: none;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-chip:hover {
+  border-color: var(--gold);
+}
+
 /* Copy / action row under assistant messages */
 .message-actions {
   display: flex;
@@ -1162,13 +1251,16 @@ body {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 10px 10px 10px 10px;
+  position: relative; /* anchors the tools popup */
 }
 
 .chat-input-row:focus-within {
   border-color: var(--gold);
 }
 
-.attach-btn {
+/* ---- "+" tools button + labeled popup menu (replaces the old
+   unlabeled icon-only buttons) ---- */
+.tools-btn {
   flex-shrink: 0;
   width: 30px;
   height: 30px;
@@ -1182,40 +1274,97 @@ body {
   margin-bottom: 2px;
 }
 
-.attach-btn:hover {
+.tools-btn:hover,
+.tools-btn[aria-expanded="true"] {
   border-color: var(--gold);
   color: var(--gold);
 }
 
-.campaign-mode-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 30px;
-  border-radius: 15px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-soft);
-  font-family: var(--font-body);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 0 12px;
-  cursor: pointer;
-  margin-bottom: 2px;
-  white-space: nowrap;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.campaign-mode-btn:hover {
-  border-color: var(--gold);
-  color: var(--gold);
-}
-
-.campaign-mode-btn.active {
+.tools-btn.has-active {
   background: var(--gold);
   border-color: var(--gold);
   color: var(--navy-deep, #16202E);
+}
+
+.tools-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 230px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tools-popup.hidden {
+  display: none;
+}
+
+.tools-popup-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  padding: 10px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tools-popup-item:hover {
+  background: var(--bg-main);
+}
+
+.tools-popup-item .popup-icon {
+  width: 18px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 14px;
+}
+
+.tools-popup-item-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.tools-popup-item-hint {
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.tools-popup-check {
+  flex-shrink: 0;
+  width: 14px;
+  color: var(--gold);
+  font-weight: 700;
+  opacity: 0;
+}
+
+.tools-popup-item.active {
+  background: var(--bg-main);
+}
+
+.tools-popup-item.active .tools-popup-check {
+  opacity: 1;
+}
+
+.tools-popup-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
 }
 
 .campaign-card {
@@ -1317,10 +1466,6 @@ body {
   font-size: 12.5px;
   color: #7DB88A;
   font-weight: 600;
-}
-
-.landing-page-btn {
-  font-size: 12px;
 }
 
 .campaign-lp-divider {
@@ -1431,17 +1576,36 @@ body {
   outline-offset: 2px;
 }
 
-/* ===================== Mobile ===================== */
-
-/* Hidden on desktop — only shown inside the mobile media query below */
+/* ===================== Sidebar toggle button ===================== */
+/* Visible on ALL screen sizes now — desktop collapses the sidebar
+   in place, mobile slides it off-canvas. Positioned in the top-left
+   corner, same spot on both. */
 .mobile-menu-btn {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0 0 12px 4px;
+}
+
+.mobile-menu-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
 }
 
 .sidebar-backdrop {
   display: none;
 }
 
+/* ===================== Mobile ===================== */
 @media (max-width: 720px) {
   .sidebar {
     position: fixed;
@@ -1453,19 +1617,31 @@ body {
     transform: translateX(-100%);
     transition: transform 0.22s ease;
     z-index: 30;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .sidebar.open {
     transform: translateX(0);
   }
 
-  .campaign-mode-btn {
-    padding: 0 8px;
-    font-size: 11.5px;
+  /* Width/padding collapse rules only make sense on desktop; on
+     mobile the sidebar is always full off-canvas width and slides
+     via transform instead. */
+  .sidebar.collapsed {
+    width: 78vw;
+    max-width: 280px;
+    padding-left: 12px;
+    padding-right: 12px;
+    border-right-color: var(--border);
   }
 
-  .campaign-mode-btn .icon-text {
+  .sidebar-reopen-btn {
     display: none;
+  }
+
+  .tools-popup {
+    min-width: 210px;
   }
 
   /* Dark backdrop behind the open sidebar — tapping it closes the menu */
@@ -1483,21 +1659,11 @@ body {
 
   /* Small top bar with a menu button, since the sidebar is hidden by default */
   .mobile-menu-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-size: 18px;
     position: fixed;
     top: calc(14px + env(safe-area-inset-top));
     left: 14px;
-    z-index: 15;
-    cursor: pointer;
+    z-index: 35;
+    margin: 0;
   }
 
   .main {

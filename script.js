@@ -48,16 +48,13 @@ const chatLog = document.getElementById("chatLog");
 const chatForm = document.getElementById("chatForm");
 const userInput = document.getElementById("userInput");
 const sendBtn = document.getElementById("sendBtn");
-const attachBtn = document.getElementById("attachBtn");
 const fileInput = document.getElementById("fileInput");
 const attachmentPreview = document.getElementById("attachmentPreview");
 const newChatBtn = document.getElementById("newChatBtn");
 const historyList = document.getElementById("historyList");
 const historySearchInput = document.getElementById("historySearchInput");
 let historyFilter = "";
-const campaignModeBtn = document.getElementById("campaignModeBtn");
 let campaignMode = false;
-const landingPageBtn = document.getElementById("landingPageBtn");
 let includeLandingPage = false;
 
 historySearchInput.addEventListener("input", () => {
@@ -196,30 +193,84 @@ function deleteProject(projectId) {
   renderActiveChat();
 }
 
-campaignModeBtn.addEventListener("click", () => {
+// --------------------------------------------------------------
+// Tools popup (replaces separate unlabeled icon buttons) — a
+// single "+" button that opens a labeled menu, same pattern as
+// Claude's attach menu. Lives above the input bar since the input
+// sits at the bottom of the screen.
+// --------------------------------------------------------------
+const toolsBtn = document.getElementById("toolsBtn");
+const toolsPopup = document.getElementById("toolsPopup");
+const toolsAttachItem = document.getElementById("toolsAttachItem");
+const toolsCampaignItem = document.getElementById("toolsCampaignItem");
+const toolsLandingItem = document.getElementById("toolsLandingItem");
+const toolsWebSearchItem = document.getElementById("toolsWebSearchItem");
+let webSearchMode = false;
+
+function closeToolsPopup() {
+  toolsPopup.classList.add("hidden");
+  toolsBtn.setAttribute("aria-expanded", "false");
+}
+
+toolsBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = toolsPopup.classList.contains("hidden");
+  toolsPopup.classList.toggle("hidden", !willOpen);
+  toolsBtn.setAttribute("aria-expanded", String(willOpen));
+});
+
+document.addEventListener("click", (e) => {
+  if (!toolsPopup.classList.contains("hidden") &&
+      !toolsBtn.contains(e.target) &&
+      !toolsPopup.contains(e.target)) {
+    closeToolsPopup();
+  }
+});
+
+function renderToolsPopupState() {
+  toolsCampaignItem.classList.toggle("active", campaignMode);
+  toolsCampaignItem.setAttribute("aria-pressed", String(campaignMode));
+
+  toolsLandingItem.classList.toggle("hidden", !campaignMode);
+  toolsLandingItem.classList.toggle("active", includeLandingPage);
+  toolsLandingItem.setAttribute("aria-pressed", String(includeLandingPage));
+
+  toolsWebSearchItem.classList.toggle("active", webSearchMode);
+  toolsWebSearchItem.setAttribute("aria-pressed", String(webSearchMode));
+
+  toolsBtn.classList.toggle("has-active", campaignMode || webSearchMode);
+}
+
+toolsAttachItem.addEventListener("click", () => {
+  closeToolsPopup();
+  fileInput.click();
+});
+
+toolsCampaignItem.addEventListener("click", () => {
   campaignMode = !campaignMode;
-  campaignModeBtn.classList.toggle("active", campaignMode);
-  campaignModeBtn.setAttribute("aria-pressed", String(campaignMode));
-  landingPageBtn.classList.toggle("hidden", !campaignMode);
+  if (!campaignMode) includeLandingPage = false;
   userInput.placeholder = campaignMode
     ? "Describe the campaign — audience, goal, offer…"
     : "Message ATM Assistant…";
+  renderToolsPopupState();
 });
 
-landingPageBtn.addEventListener("click", () => {
+toolsLandingItem.addEventListener("click", () => {
+  if (!campaignMode) return;
   includeLandingPage = !includeLandingPage;
-  landingPageBtn.classList.toggle("active", includeLandingPage);
-  landingPageBtn.setAttribute("aria-pressed", String(includeLandingPage));
+  renderToolsPopupState();
+});
+
+toolsWebSearchItem.addEventListener("click", () => {
+  webSearchMode = !webSearchMode;
+  renderToolsPopupState();
 });
 
 function resetCampaignMode() {
   campaignMode = false;
   includeLandingPage = false;
-  campaignModeBtn.classList.remove("active");
-  campaignModeBtn.setAttribute("aria-pressed", "false");
-  landingPageBtn.classList.remove("active", "hidden");
-  landingPageBtn.setAttribute("aria-pressed", "false");
   userInput.placeholder = "Message ATM Assistant…";
+  renderToolsPopupState();
 }
 
 const settingsOverlay = document.getElementById("settingsOverlay");
@@ -692,20 +743,64 @@ function applySettingsToForm() {
 }
 
 // --------------------------------------------------------------
-// Mobile sidebar toggle
+// Sidebar toggle — works the same way on desktop and mobile now.
+// Desktop: collapses the sidebar to width 0 (content stays mounted,
+// just visually hidden) and shows a small floating re-open tab.
+// Mobile: same off-canvas slide behaviour as before, plus a backdrop.
 // --------------------------------------------------------------
-mobileMenuBtn.addEventListener("click", openSidebar);
-sidebarBackdrop.addEventListener("click", closeSidebar);
+const sidebarReopenBtn = document.getElementById("sidebarReopenBtn");
+
+function isMobileViewport() {
+  return window.matchMedia("(max-width: 720px)").matches;
+}
 
 function openSidebar() {
-  sidebar.classList.add("open");
-  sidebarBackdrop.classList.remove("hidden");
+  if (isMobileViewport()) {
+    sidebar.classList.add("open");
+    sidebarBackdrop.classList.remove("hidden");
+  } else {
+    sidebar.classList.remove("collapsed");
+    sidebarReopenBtn.classList.add("hidden");
+  }
 }
 
 function closeSidebar() {
-  sidebar.classList.remove("open");
-  sidebarBackdrop.classList.add("hidden");
+  if (isMobileViewport()) {
+    sidebar.classList.remove("open");
+    sidebarBackdrop.classList.add("hidden");
+  } else {
+    sidebar.classList.add("collapsed");
+    sidebarReopenBtn.classList.remove("hidden");
+  }
 }
+
+function toggleSidebar() {
+  const isCurrentlyOpen = isMobileViewport()
+    ? sidebar.classList.contains("open")
+    : !sidebar.classList.contains("collapsed");
+  if (isCurrentlyOpen) {
+    closeSidebar();
+  } else {
+    openSidebar();
+  }
+}
+
+mobileMenuBtn.addEventListener("click", toggleSidebar);
+sidebarReopenBtn.addEventListener("click", openSidebar);
+sidebarBackdrop.addEventListener("click", closeSidebar);
+
+// If the viewport crosses the mobile/desktop breakpoint while the
+// sidebar happens to be in the "off" state for the other mode, make
+// sure it doesn't get stuck invisible with no way to reopen it.
+window.addEventListener("resize", () => {
+  if (isMobileViewport()) {
+    sidebar.classList.remove("collapsed");
+    sidebarReopenBtn.classList.add("hidden");
+  } else {
+    sidebar.classList.remove("open");
+    sidebarBackdrop.classList.add("hidden");
+  }
+});
 
 // --------------------------------------------------------------
 // New chat
@@ -715,15 +810,13 @@ newChatBtn.addEventListener("click", () => {
   renderSidebar();
   renderActiveChat();
   userInput.focus();
-  closeSidebar();
+  if (isMobileViewport()) closeSidebar();
 });
 
 // --------------------------------------------------------------
 // File attachments (images and plain text files)
 // --------------------------------------------------------------
 let pendingAttachment = null; // { kind: "image"|"text", name, data }
-
-attachBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files[0];
@@ -818,7 +911,7 @@ function addTypingIndicator() {
   wrapper.appendChild(avatar);
   wrapper.appendChild(body);
   chatLog.appendChild(wrapper);
-  chatLog.scrollTop = chatLog.scrollHeight;
+  scrollChatToBottomIfNearBottom(true);
 }
 
 // --------------------------------------------------------------
@@ -879,9 +972,10 @@ async function handleSend(event) {
   addTypingIndicator();
 
   const mode = campaignMode ? "campaign" : undefined;
+  const useWebSearch = webSearchMode;
 
   try {
-    const result = await callGroqAPI(session.messages, mode);
+    const result = await callGroqAPI(session.messages, mode, useWebSearch);
 
     if (mode === "campaign") {
       session.messages.push({
@@ -894,7 +988,7 @@ async function handleSend(event) {
       saveUserData();
       renderActiveChat();
     } else {
-      session.messages.push({ role: "assistant", content: result });
+      session.messages.push({ role: "assistant", content: result.reply, sources: result.sources });
       saveUserData();
       renderActiveChat({ typeLast: true });
     }
@@ -919,7 +1013,7 @@ async function handleSend(event) {
 // API call
 // --------------------------------------------------------------
 
-  async function callGroqAPI(messages, mode) {
+  async function callGroqAPI(messages, mode, useWebSearch) {
   const authHeaders = await getAuthHeaders();
 
   const cleanMessages = messages.map((msg) => ({ role: msg.role, content: msg.content }));
@@ -928,7 +1022,13 @@ async function handleSend(event) {
   const response = await fetch(CHAT_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders },
-    body: JSON.stringify({ messages: cleanMessages, settings: settingsForRequest, mode, includeLandingPage: mode === "campaign" ? includeLandingPage : undefined })
+    body: JSON.stringify({
+      messages: cleanMessages,
+      settings: settingsForRequest,
+      mode,
+      includeLandingPage: mode === "campaign" ? includeLandingPage : undefined,
+      webSearch: mode === "campaign" ? undefined : Boolean(useWebSearch)
+    })
   });
 
   const data = await response.json();
@@ -945,7 +1045,7 @@ async function handleSend(event) {
   }
 
   if (!data.reply) throw new Error("No text returned from the API.");
-  return data.reply.trim();
+  return { reply: data.reply.trim(), sources: data.sources || [] };
 }
 
 // --------------------------------------------------------------
@@ -979,7 +1079,7 @@ function renderSidebar() {
       activeId = session.id;
       renderSidebar();
       renderActiveChat();
-      closeSidebar();
+      if (isMobileViewport()) closeSidebar();
     });
 
     const menuBtn = document.createElement("button");
@@ -1023,6 +1123,23 @@ function handleHistoryMenu(sessionId) {
 // --------------------------------------------------------------
 // Rendering — chat log
 // --------------------------------------------------------------
+
+// How close to the bottom (in px) counts as "still at the bottom",
+// so a forced scroll never fires while the user has scrolled up to
+// read earlier messages — this is what fixes "can't scroll up while
+// the AI is typing".
+const SCROLL_NEAR_BOTTOM_PX = 80;
+
+function isChatNearBottom() {
+  return chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < SCROLL_NEAR_BOTTOM_PX;
+}
+
+function scrollChatToBottomIfNearBottom(force = false) {
+  if (force || isChatNearBottom()) {
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+}
+
 function renderActiveChat(options = {}) {
   const session = getActiveSession();
 
@@ -1045,13 +1162,16 @@ function renderActiveChat(options = {}) {
     const role = msg.role === "user" ? "user" : "assistant";
     const isLast = index === session.messages.length - 1;
     const shouldType = Boolean(options.typeLast) && isLast && role === "assistant";
-    addMessageToDOM(msg.content, role, shouldType);
+    addMessageToDOM(msg.content, role, shouldType, msg.sources);
   });
 
+  // Always jump to bottom the first time a chat is opened / re-rendered
+  // in full (switching sessions, sending a new message) — the "stay put
+  // while typing" behaviour only applies to the token-by-token effect.
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-function addMessageToDOM(content, kind, animate = false) {
+function addMessageToDOM(content, kind, animate = false, sources = []) {
   const textPart = Array.isArray(content)
     ? (content.find(p => p.type === "text")?.text || "")
     : content;
@@ -1090,6 +1210,10 @@ function addMessageToDOM(content, kind, animate = false) {
   }
   body.appendChild(bubble);
 
+  if (kind === "assistant" && sources && sources.length > 0) {
+    body.appendChild(buildSourcesRow(sources));
+  }
+
   if (kind === "assistant" && textPart) {
     const actions = document.createElement("div");
     actions.className = "message-actions";
@@ -1110,6 +1234,30 @@ function addMessageToDOM(content, kind, animate = false) {
   wrapper.appendChild(avatar);
   wrapper.appendChild(body);
   chatLog.appendChild(wrapper);
+}
+
+// Small "Sources" row under a web-search-backed reply — expects
+// sources as [{ title, url }], returned by the backend.
+function buildSourcesRow(sources) {
+  const row = document.createElement("div");
+  row.className = "sources-row";
+
+  const label = document.createElement("span");
+  label.className = "sources-label";
+  label.textContent = "Sources:";
+  row.appendChild(label);
+
+  sources.slice(0, 5).forEach((src) => {
+    const link = document.createElement("a");
+    link.className = "source-chip";
+    link.href = src.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = src.title || new URL(src.url).hostname;
+    row.appendChild(link);
+  });
+
+  return row;
 }
 
 function campaignToText(campaign) {
@@ -1250,15 +1398,23 @@ function campaignField(label, value, isBody = false) {
   return section;
 }
 
+// --------------------------------------------------------------
+// Typewriter effect — only auto-scrolls while the user is already
+// at (or near) the bottom of the chat log, so scrolling up to read
+// older messages while the AI is still "typing" is never fought.
+// --------------------------------------------------------------
 function typeWriterEffect(el, fullText, speedMs = 16) {
   const tokens = fullText.split(/(\s+)/);
   let i = 0;
   el.innerHTML = "";
 
   function step() {
+    const wasNearBottom = isChatNearBottom();
     i++;
     el.innerHTML = renderMarkdown(tokens.slice(0, i).join(""));
-    chatLog.scrollTop = chatLog.scrollHeight;
+    if (wasNearBottom) {
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
     if (i < tokens.length) {
       setTimeout(step, speedMs);
     }
@@ -1381,3 +1537,4 @@ function getActiveSession() {
 // onAuthStateChange even resolves.
 // --------------------------------------------------------------
 renderActiveChat();
+renderToolsPopupState();
