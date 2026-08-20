@@ -45,6 +45,7 @@ module.exports = async function (req, res) {
 
   try {
     const event = req.body;
+    console.log("Webhook: RAW body ->", JSON.stringify(event));
     console.log("Webhook: received event", event?.event, "status:", event?.data?.status);
 
     if (event.event === "charge.completed" && event.data?.status === "successful") {
