@@ -38,11 +38,10 @@
     <!-- Sidebar toggle — visible on desktop and mobile now.
          Desktop: collapses the sidebar in place.
          Mobile: slides it off-canvas. -->
-    <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Toggle sidebar">☰</button>
-
-    <!-- Small floating tab shown only when the sidebar is collapsed
-         on desktop, so there's always a way to bring it back. -->
-    <button id="sidebarReopenBtn" class="sidebar-reopen-btn hidden" aria-label="Open sidebar">☰</button>
+    <!-- Fixed floating button — lives OUTSIDE the sidebar, so it's
+         unaffected by the sidebar being off-canvas/collapsed. Shown
+         only while the sidebar is closed; JS toggles .hidden on it. -->
+    <button id="sidebarOpenBtn" class="sidebar-toggle-btn sidebar-open-btn hidden" aria-label="Open sidebar">☰</button>
 
     <!-- Only visible on small screens when sidebar is open — tap to close -->
     <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
@@ -51,6 +50,12 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-top">
         <div class="brand">
+          <!-- Lives INSIDE the sidebar on purpose: when the sidebar
+               collapses (desktop, width 0) or slides off-canvas
+               (mobile), this button disappears right along with it —
+               no separate visibility bookkeeping needed for the
+               "close" side of the toggle. -->
+          <button id="sidebarCloseBtn" class="sidebar-toggle-btn sidebar-close-btn" aria-label="Close sidebar">☰</button>
           <img src="/atm-icon-white-512.png" alt="ATM" class="brand-mark" style="width:24px; height:24px;">
           <span class="brand-name">ATM</span>
         </div>

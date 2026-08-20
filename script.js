@@ -62,7 +62,8 @@ historySearchInput.addEventListener("input", () => {
   renderSidebar();
 });
 const sidebar = document.getElementById("sidebar");
-const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+const sidebarOpenBtn = document.getElementById("sidebarOpenBtn");
+const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
 const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
 const settingsBtn = document.getElementById("settingsBtn");
@@ -748,8 +749,14 @@ function applySettingsToForm() {
 // just visually hidden) and shows a small floating re-open tab.
 // Mobile: same off-canvas slide behaviour as before, plus a backdrop.
 // --------------------------------------------------------------
-const sidebarReopenBtn = document.getElementById("sidebarReopenBtn");
-
+// Two toggle buttons that are never visible at the same time by
+// construction, not by manual bookkeeping:
+//   - sidebarCloseBtn lives INSIDE the sidebar, so it vanishes the
+//     instant the sidebar collapses/slides away.
+//   - sidebarOpenBtn lives OUTSIDE, fixed in the corner, and JS shows
+//     it only while the sidebar is closed.
+// That's what fixes the "two buttons stacked" bug — there's no
+// longer a state where both can render at once.
 function isMobileViewport() {
   return window.matchMedia("(max-width: 720px)").matches;
 }
@@ -760,8 +767,8 @@ function openSidebar() {
     sidebarBackdrop.classList.remove("hidden");
   } else {
     sidebar.classList.remove("collapsed");
-    sidebarReopenBtn.classList.add("hidden");
   }
+  sidebarOpenBtn.classList.add("hidden");
 }
 
 function closeSidebar() {
@@ -770,8 +777,8 @@ function closeSidebar() {
     sidebarBackdrop.classList.add("hidden");
   } else {
     sidebar.classList.add("collapsed");
-    sidebarReopenBtn.classList.remove("hidden");
   }
+  sidebarOpenBtn.classList.remove("hidden");
 }
 
 function toggleSidebar() {
@@ -785,9 +792,18 @@ function toggleSidebar() {
   }
 }
 
-mobileMenuBtn.addEventListener("click", toggleSidebar);
-sidebarReopenBtn.addEventListener("click", openSidebar);
+sidebarCloseBtn.addEventListener("click", closeSidebar);
+sidebarOpenBtn.addEventListener("click", openSidebar);
 sidebarBackdrop.addEventListener("click", closeSidebar);
+
+// Initial state: mobile starts closed (sidebar off-canvas by default
+// CSS, so show the open button); desktop starts open (sidebar has
+// neither "open" nor "collapsed" yet, so hide the open button).
+if (isMobileViewport()) {
+  sidebarOpenBtn.classList.remove("hidden");
+} else {
+  sidebarOpenBtn.classList.add("hidden");
+}
 
 // If the viewport crosses the mobile/desktop breakpoint while the
 // sidebar happens to be in the "off" state for the other mode, make
@@ -795,10 +811,12 @@ sidebarBackdrop.addEventListener("click", closeSidebar);
 window.addEventListener("resize", () => {
   if (isMobileViewport()) {
     sidebar.classList.remove("collapsed");
-    sidebarReopenBtn.classList.add("hidden");
+    if (!sidebar.classList.contains("open")) sidebarOpenBtn.classList.remove("hidden");
   } else {
     sidebar.classList.remove("open");
     sidebarBackdrop.classList.add("hidden");
+    if (sidebar.classList.contains("collapsed")) sidebarOpenBtn.classList.remove("hidden");
+    else sidebarOpenBtn.classList.add("hidden");
   }
 });
 
@@ -1072,15 +1090,21 @@ function renderSidebar() {
     const item = document.createElement("div");
     item.className = "history-item" + (session.id === activeId ? " active" : "");
 
-    const label = document.createElement("span");
-    label.className = "history-item-label";
-    label.textContent = session.title || "New chat";
-    label.addEventListener("click", () => {
+    // Click handler lives on `item` — the same element that carries the
+    // :hover CSS rule — rather than on the inner label span. iOS Safari
+    // requires a tap-to-click target to match its hover target, or the
+    // first tap only "hovers" and a second tap is needed to actually
+    // fire the click. This is what fixes "double tap to open a chat".
+    item.addEventListener("click", () => {
       activeId = session.id;
       renderSidebar();
       renderActiveChat();
       if (isMobileViewport()) closeSidebar();
     });
+
+    const label = document.createElement("span");
+    label.className = "history-item-label";
+    label.textContent = session.title || "New chat";
 
     const menuBtn = document.createElement("button");
     menuBtn.className = "history-item-menu";
