@@ -30,8 +30,8 @@ async function verifySupabaseToken(authHeader) {
 }
 
 const PLAN_CONFIG = {
-  NGN: { amount: "8000", planId: process.env.FLW_PLAN_ID_NGN || "167115" },
-  USD: { amount: "9", planId: process.env.FLW_PLAN_ID_USD || "167116" }
+  NGN: { amount: "8000", planId: process.env.FLW_PLAN_ID_NGN || "242244" },
+  USD: { amount: "9", planId: process.env.FLW_PLAN_ID_USD || "242245" }
 };
 
 module.exports = async function (req, res) {
