@@ -449,7 +449,8 @@ function defaultSettings() {
       avoidWords: "",
       sampleEmail: ""
     },
-    projects: [],\nmemories: []
+    projects: [],
+    memories: []
   };
 }
 
