@@ -1183,7 +1183,8 @@ newChatBtn.addEventListener("click", () => {
 // --------------------------------------------------------------
 // File attachments (images and plain text files)
 // --------------------------------------------------------------
-let pendingAttachment = null; // { kind: "image"|"text", name, data }
+let pendingAttachments = []; // [{ kind: "image"|"text", name, data }]
+const MAX_ATTACHMENTS = 8;
 
 // 8MB covers a large brand PDF or subscriber CSV without risking a
 // frozen tab on mobile Safari while it reads into memory.
@@ -1193,45 +1194,46 @@ const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const MAX_EXTRACTED_CHARS = 40000;
 
 fileInput.addEventListener("change", async () => {
-  const file = fileInput.files[0];
-  if (!file) return;
+  const files = Array.from(fileInput.files || []);
+  if (files.length === 0) return;
 
-  if (file.size > MAX_ATTACHMENT_BYTES) {
-    alert(`That file is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Please use a file under 8MB.`);
-    fileInput.value = "";
-    return;
-  }
+  for (const file of files) {
+    if (pendingAttachments.length >= MAX_ATTACHMENTS) {
+      alert(`You can attach up to ${MAX_ATTACHMENTS} files per message.`);
+      break;
+    }
 
-  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-  const isDocx = file.name.toLowerCase().endsWith(".docx");
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      alert(`${file.name} is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Please use files under 8MB.`);
+      continue;
+    }
+
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    const isDocx = file.name.toLowerCase().endsWith(".docx");
 
     try {
-    if (file.type.startsWith("image/")) {
-      const dataUrl = await readFileAsDataURL(file);
-      pendingAttachment = { kind: "image", name: file.name, data: dataUrl };
+      if (file.type.startsWith("image/")) {
+        const dataUrl = await readFileAsDataURL(file);
+        pendingAttachments.push({ kind: "image", name: file.name, data: dataUrl });
+      } else if (isPdf) {
+        showAttachmentLoading(file.name);
+        const text = await extractPdfText(file);
+        pendingAttachments.push({ kind: "text", name: file.name, data: truncateExtractedText(text) });
+      } else if (isDocx) {
+        showAttachmentLoading(file.name);
+        const text = await extractDocxText(file);
+        pendingAttachments.push({ kind: "text", name: file.name, data: truncateExtractedText(text) });
+      } else {
+        const text = await readFileAsText(file);
+        pendingAttachments.push({ kind: "text", name: file.name, data: truncateExtractedText(text) });
+      }
       renderAttachmentPreview();
-    } else if (isPdf) {
-      showAttachmentLoading(file.name);
-      const text = await extractPdfText(file);
-      pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
-      renderAttachmentPreview();
-    } else if (isDocx) {
-      showAttachmentLoading(file.name);
-      const text = await extractDocxText(file);
-      pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
-      renderAttachmentPreview();
-    } else {
-      const text = await readFileAsText(file);
-      pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
-      renderAttachmentPreview();
+    } catch (error) {
+      console.error("Failed to read file:", error);
+      alert(`Couldn't read ${file.name}: ` + (error?.message || error));
     }
-  } catch (error) {
-    console.error("Failed to read file:", error);
-    alert("Couldn't read that file: " + (error?.message || error));
-    pendingAttachment = null;
-    renderAttachmentPreview();
   }
-  
+
   fileInput.value = "";
 });
 
@@ -1241,7 +1243,6 @@ function truncateExtractedText(text) {
 }
 
 function showAttachmentLoading(name) {
-  attachmentPreview.innerHTML = "";
   attachmentPreview.classList.remove("hidden");
   const chip = document.createElement("div");
   chip.className = "attachment-chip";
@@ -1304,32 +1305,34 @@ function readFileAsText(file) {
 function renderAttachmentPreview() {
   attachmentPreview.innerHTML = "";
 
-  if (!pendingAttachment) {
+  if (pendingAttachments.length === 0) {
     attachmentPreview.classList.add("hidden");
     return;
   }
 
   attachmentPreview.classList.remove("hidden");
 
-  if (pendingAttachment.kind === "image") {
-    const img = document.createElement("img");
-    img.src = pendingAttachment.data;
-    attachmentPreview.appendChild(img);
-  } else {
-    const chip = document.createElement("div");
-    chip.className = "attachment-chip";
-    chip.textContent = "📄 " + pendingAttachment.name;
-    attachmentPreview.appendChild(chip);
-  }
+  pendingAttachments.forEach((attachment, index) => {
+    if (attachment.kind === "image") {
+      const img = document.createElement("img");
+      img.src = attachment.data;
+      attachmentPreview.appendChild(img);
+    } else {
+      const chip = document.createElement("div");
+      chip.className = "attachment-chip";
+      chip.textContent = "📄 " + attachment.name;
+      attachmentPreview.appendChild(chip);
+    }
 
-  const removeBtn = document.createElement("button");
-  removeBtn.className = "attachment-remove";
-  removeBtn.textContent = "✕";
-  removeBtn.addEventListener("click", () => {
-    pendingAttachment = null;
-    renderAttachmentPreview();
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "attachment-remove";
+    removeBtn.textContent = "✕";
+    removeBtn.addEventListener("click", () => {
+      pendingAttachments.splice(index, 1);
+      renderAttachmentPreview();
+    });
+    attachmentPreview.appendChild(removeBtn);
   });
-  attachmentPreview.appendChild(removeBtn);
 }
 
 // --------------------------------------------------------------
@@ -1375,13 +1378,13 @@ userInput.addEventListener("input", autoGrow);
 async function handleSend(event) {
   event.preventDefault();
 
-  const text = userInput.value.trim();
-  if (!text && !pendingAttachment) return;
+    const text = userInput.value.trim();
+  if (!text && pendingAttachments.length === 0) return;
 
   if (activeId === null) {
     const newSession = {
       id: Date.now().toString(),
-      title: (text || pendingAttachment.name).slice(0, 40),
+      title: (text || pendingAttachments[0].name).slice(0, 40),
       messages: [],
       projectId: activeProjectId
     };
@@ -1389,27 +1392,34 @@ async function handleSend(event) {
     activeId = newSession.id;
   }
 
-  let content = text;
+    let content = text;
+  const attachmentSummary = pendingAttachments.map((a) => ({ kind: a.kind, name: a.name }));
 
-  if (pendingAttachment) {
-    if (pendingAttachment.kind === "image") {
-      content = [
-        { type: "text", text: text || "What's in this image?" },
-        { type: "image_url", image_url: { url: pendingAttachment.data } }
-      ];
-    } else {
-      content = `${text}\n\n[Attached file: ${pendingAttachment.name}]\n${pendingAttachment.data}`;
-    }
+  if (pendingAttachments.length > 0) {
+    const imageParts = pendingAttachments
+      .filter((a) => a.kind === "image")
+      .map((a) => ({ type: "image_url", image_url: { url: a.data } }));
+
+    const textAttachments = pendingAttachments
+      .filter((a) => a.kind === "text")
+      .map((a) => `[Attached file: ${a.name}]\n${a.data}`)
+      .join("\n\n");
+
+    const combinedText = [text, textAttachments].filter(Boolean).join("\n\n");
+
+    content = imageParts.length > 0
+      ? [{ type: "text", text: combinedText || "What's in this?" }, ...imageParts]
+      : combinedText;
   }
 
   const session = getActiveSession();
-  session.messages.push({ role: "user", content });
+  session.messages.push({ role: "user", content, displayText: text, attachments: attachmentSummary });
   saveUserData();
   renderSidebar();
   renderActiveChat();
 
   userInput.value = "";
-  pendingAttachment = null;
+  pendingAttachments = [];
   renderAttachmentPreview();
   autoGrow();
   setLoading(true);
@@ -1623,7 +1633,7 @@ function renderActiveChat(options = {}) {
     const role = msg.role === "user" ? "user" : "assistant";
     const isLast = index === session.messages.length - 1;
     const shouldType = Boolean(options.typeLast) && isLast && role === "assistant";
-    addMessageToDOM(msg.content, role, shouldType, msg.sources);
+    addMessageToDOM(msg, role, shouldType);
   });
 
   // Always jump to bottom the first time a chat is opened / re-rendered
@@ -1632,13 +1642,16 @@ function renderActiveChat(options = {}) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-function addMessageToDOM(content, kind, animate = false, sources = []) {
-  const textPart = Array.isArray(content)
-    ? (content.find(p => p.type === "text")?.text || "")
-    : content;
-  const imagePart = Array.isArray(content)
-    ? content.find(p => p.type === "image_url")
-    : null;
+function addMessageToDOM(msg, kind, animate = false) {
+  const content = msg.content;
+  const sources = msg.sources || [];
+  const hasOwnDisplayText = kind === "user" && Array.isArray(msg.attachments);
+
+  const textPart = hasOwnDisplayText
+    ? msg.displayText
+    : (Array.isArray(content) ? (content.find(p => p.type === "text")?.text || "") : content);
+
+  const imageParts = Array.isArray(content) ? content.filter(p => p.type === "image_url") : [];
 
   const wrapper = document.createElement("div");
   wrapper.className = `message ${kind}`;
@@ -1650,11 +1663,20 @@ function addMessageToDOM(content, kind, animate = false, sources = []) {
   const body = document.createElement("div");
   body.className = "message-body";
 
-  if (imagePart) {
+  imageParts.forEach((imagePart) => {
     const img = document.createElement("img");
     img.className = "message-image";
     img.src = imagePart.image_url.url;
     body.appendChild(img);
+  });
+
+  if (kind === "user" && msg.attachments) {
+    msg.attachments.filter(a => a.kind === "text").forEach((a) => {
+      const chip = document.createElement("div");
+      chip.className = "attachment-chip";
+      chip.textContent = "📄 " + a.name;
+      body.appendChild(chip);
+    });
   }
 
   const bubble = document.createElement("div");
@@ -1669,7 +1691,7 @@ function addMessageToDOM(content, kind, animate = false, sources = []) {
   } else {
     bubble.textContent = textPart;
   }
-  body.appendChild(bubble);
+  if (textPart) body.appendChild(bubble);
 
   if (kind === "assistant" && sources && sources.length > 0) {
     body.appendChild(buildSourcesRow(sources));
