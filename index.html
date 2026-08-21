@@ -310,6 +310,62 @@
       </div>
     </div>
 
+    <!-- ===================== ONBOARDING WIZARD ===================== -->
+    <!-- Shown once, right after a brand-new account's first login, to
+         pre-fill the Brand Profile without making them dig through
+         Settings first. Skippable at every step. -->
+    <div id="onboardingOverlay" class="modal-overlay hidden">
+      <div class="modal onboarding-modal">
+        <div class="modal-header">
+          <h2>Set up your brand</h2>
+          <button id="skipOnboardingBtn" class="modal-close" aria-label="Skip setup">Skip</button>
+        </div>
+
+        <div class="onboarding-progress">
+          <span class="onboarding-dot active" data-step="1"></span>
+          <span class="onboarding-dot" data-step="2"></span>
+          <span class="onboarding-dot" data-step="3"></span>
+        </div>
+
+        <div class="modal-body onboarding-body">
+          <div class="onboarding-step" data-step="1">
+            <p class="settings-hint">A few quick questions so every reply and campaign already sounds like you. Takes under a minute — you can always change this later in Settings.</p>
+
+            <label class="field-label" for="obBrandName">Business / brand name</label>
+            <input type="text" id="obBrandName" placeholder="e.g. ATM Assistant" autocomplete="off" />
+
+            <label class="field-label" for="obBrandIndustry">Industry</label>
+            <input type="text" id="obBrandIndustry" placeholder="e.g. fashion, SaaS, coaching" autocomplete="off" />
+          </div>
+
+          <div class="onboarding-step hidden" data-step="2">
+            <p class="settings-hint">Who are you writing to, and how should it sound?</p>
+
+            <label class="field-label" for="obBrandAudience">Target audience</label>
+            <textarea id="obBrandAudience" rows="2" placeholder="e.g. Young professional women in Lagos, budget-conscious but style-focused"></textarea>
+
+            <label class="field-label" for="obBrandVoice">Brand voice</label>
+            <input type="text" id="obBrandVoice" placeholder="e.g. warm, confident, a little playful" autocomplete="off" />
+          </div>
+
+          <div class="onboarding-step hidden" data-step="3">
+            <p class="settings-hint">Optional, but it makes a real difference to the output.</p>
+
+            <label class="field-label" for="obBrandAvoidWords">Words/phrases to avoid</label>
+            <input type="text" id="obBrandAvoidWords" placeholder="e.g. cheap, discount, hurry" autocomplete="off" />
+
+            <label class="field-label" for="obBrandSampleEmail">Sample past email</label>
+            <textarea id="obBrandSampleEmail" rows="3" placeholder="Paste a past email so the AI can match your style"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer onboarding-footer">
+          <button type="button" id="onboardingBackBtn" class="ob-back-btn hidden">Back</button>
+          <button type="button" id="onboardingNextBtn" class="save-btn">Continue</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ===================== MAIN AREA ===================== -->
     <main class="main">
 
