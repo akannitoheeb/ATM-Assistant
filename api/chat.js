@@ -12,14 +12,21 @@
 //   5. Per-user limit — 25/day free, 200/day Pro (checked via the
 //      subscriptions table)
 //
-// Web search (new): when the client sends webSearch: true on a
-// normal (non-campaign) message, we call Tavily's search API first
-// with the user's latest message as the query, and feed the results
-// into the system prompt as grounding context before calling Groq.
-// Requires a TAVILY_API_KEY env var — get a free key at tavily.com.
-// If that key is missing, or the search call fails for any reason,
-// we silently fall back to answering without search rather than
-// failing the whole request.
+// Web search: when the client sends webSearch: true on a normal
+// (non-campaign, non-sequence) message, we call Tavily's search API
+// first with the user's latest message as the query, and feed the
+// results into the system prompt as grounding context before calling
+// Groq. Requires a TAVILY_API_KEY env var — get a free key at
+// tavily.com. If that key is missing, or the search call fails for
+// any reason, we silently fall back to answering without search
+// rather than failing the whole request.
+//
+// Modes (mutually exclusive, chosen by the client):
+//   - undefined/normal  — plain chat, optionally with web search
+//   - "campaign"        — single email, JSON-structured, optionally
+//                          + landing page (includeLandingPage) and/or
+//                          + SMS/social repurposing (includeRepurpose)
+//   - "sequence"         — a 3-5 email drip sequence, JSON-structured
 // ============================================================
 
 const TEXT_MODEL = "openai/gpt-oss-120b";
@@ -31,11 +38,26 @@ const GLOBAL_GUEST_DAILY_CAP = 300;
 const NORMAL_MESSAGE_WEIGHT = 1;
 const CAMPAIGN_MESSAGE_WEIGHT = 2;
 const CAMPAIGN_LANDING_MESSAGE_WEIGHT = 3;
+const REPURPOSE_EXTRA_WEIGHT = 1;
+const SEQUENCE_MIN_LENGTH = 3;
+const SEQUENCE_MAX_LENGTH = 5;
 
-function getRequestWeight(mode, includeLandingPage, sequenceLength) {
-  if (mode === "sequence") return Math.min(sequenceLength || 3, 5); // 1 credit per email, capped
+// weightOpts: { includeLandingPage, includeRepurpose, sequenceLength }
+function getRequestWeight(mode, weightOpts = {}) {
+  const { includeLandingPage, includeRepurpose, sequenceLength } = weightOpts;
+
+  if (mode === "sequence") {
+    // 1 credit per email in the sequence, clamped to the allowed range
+    // so a bad/missing client value can't under- or over-charge.
+    const length = Math.min(Math.max(sequenceLength || SEQUENCE_MIN_LENGTH, SEQUENCE_MIN_LENGTH), SEQUENCE_MAX_LENGTH);
+    return length;
+  }
+
   if (mode !== "campaign") return NORMAL_MESSAGE_WEIGHT;
-  return includeLandingPage ? CAMPAIGN_LANDING_MESSAGE_WEIGHT : CAMPAIGN_MESSAGE_WEIGHT;
+
+  let weight = includeLandingPage ? CAMPAIGN_LANDING_MESSAGE_WEIGHT : CAMPAIGN_MESSAGE_WEIGHT;
+  if (includeRepurpose) weight += REPURPOSE_EXTRA_WEIGHT;
+  return weight;
 }
 
 function conversationHasImage(messages) {
@@ -142,24 +164,78 @@ if the user's own message includes emoji, or in the rare moment a touch of
 humor or genuine sympathy calls for it.
 `.trim();
 
-const CAMPAIGN_SCHEMA = {
-  type: "json_schema",
-  json_schema: {
-    name: "email_campaign",
-    strict: true,
-    schema: {
-      type: "object",
-      properties: {
-        subject_lines: { type: "array", items: { type: "string" } },
-        preheader: { type: "string" },
-        body: { type: "string" },
-        cta_text: { type: "string" }
-      },
-      required: ["subject_lines", "preheader", "body", "cta_text"],
-      additionalProperties: false
-    }
+// --------------------------------------------------------------
+// Shared schema building blocks — pulled out to their own consts so
+// both the single-campaign schema and (in principle) any future
+// schema can reuse them without duplicating the shape.
+// --------------------------------------------------------------
+const LANDING_PAGE_SCHEMA_FIELD = {
+  type: "object",
+  properties: {
+    headline: { type: "string" },
+    subheadline: { type: "string" },
+    sections: { type: "array", items: { type: "string" } },
+    landing_cta_text: { type: "string" }
+  },
+  required: ["headline", "subheadline", "sections", "landing_cta_text"],
+  additionalProperties: false
+};
+
+const REPURPOSE_SCHEMA_FIELDS = {
+  sms: {
+    type: "object",
+    properties: {
+      message: { type: "string" },
+      character_count: { type: "integer" }
+    },
+    required: ["message", "character_count"],
+    additionalProperties: false
+  },
+  social: {
+    type: "object",
+    properties: {
+      instagram_caption: { type: "string" },
+      linkedin_caption: { type: "string" },
+      x_caption: { type: "string" },
+      hashtags: { type: "array", items: { type: "string" } }
+    },
+    required: ["instagram_caption", "linkedin_caption", "x_caption", "hashtags"],
+    additionalProperties: false
   }
 };
+
+// Builds the campaign response_format schema on the fly based on
+// which add-ons are active, instead of maintaining a combinatorial
+// set of static CAMPAIGN_*_SCHEMA constants (that approach doesn't
+// scale past two toggles).
+function buildCampaignSchema({ includeLandingPage, includeRepurpose } = {}) {
+  const properties = {
+    subject_lines: { type: "array", items: { type: "string" } },
+    preheader: { type: "string" },
+    body: { type: "string" },
+    cta_text: { type: "string" }
+  };
+  const required = ["subject_lines", "preheader", "body", "cta_text"];
+
+  if (includeLandingPage) {
+    properties.landing_page = LANDING_PAGE_SCHEMA_FIELD;
+    required.push("landing_page");
+  }
+  if (includeRepurpose) {
+    properties.sms = REPURPOSE_SCHEMA_FIELDS.sms;
+    properties.social = REPURPOSE_SCHEMA_FIELDS.social;
+    required.push("sms", "social");
+  }
+
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: "email_campaign",
+      strict: true,
+      schema: { type: "object", properties, required, additionalProperties: false }
+    }
+  };
+}
 
 const SEQUENCE_SCHEMA = {
   type: "json_schema",
@@ -194,36 +270,6 @@ const SEQUENCE_SCHEMA = {
   }
 };
 
-const CAMPAIGN_WITH_LANDING_SCHEMA = {
-  type: "json_schema",
-  json_schema: {
-    name: "email_campaign_with_landing",
-    strict: true,
-    schema: {
-      type: "object",
-      properties: {
-        subject_lines: { type: "array", items: { type: "string" } },
-        preheader: { type: "string" },
-        body: { type: "string" },
-        cta_text: { type: "string" },
-        landing_page: {
-          type: "object",
-          properties: {
-            headline: { type: "string" },
-            subheadline: { type: "string" },
-            sections: { type: "array", items: { type: "string" } },
-            landing_cta_text: { type: "string" }
-          },
-          required: ["headline", "subheadline", "sections", "landing_cta_text"],
-          additionalProperties: false
-        }
-      },
-      required: ["subject_lines", "preheader", "body", "cta_text", "landing_page"],
-      additionalProperties: false
-    }
-  }
-};
-
 const CAMPAIGN_INSTRUCTION = `
 The user wants a complete email marketing campaign. Fill subject_lines with
 2-3 distinct options, write a compelling preheader, a complete email body
@@ -238,6 +284,30 @@ benefits, social proof, or FAQs), and a landing page CTA button text.
 Keep the landing page's tone and message consistent with the email itself.
 `.trim();
 
+const REPURPOSE_INSTRUCTION = `
+Also repurpose this campaign into: (1) a single SMS message under 160
+characters (report the actual character_count) that captures the core
+offer/CTA in a way that reads naturally as a text, not a shrunk email;
+(2) social captions for Instagram, LinkedIn, and X, each matching that
+platform's natural tone and length norms, plus a short relevant hashtag
+list. Keep the offer and CTA consistent across every format — only the
+tone and length should adapt.
+`.trim();
+
+function buildSequenceInstruction(length) {
+  return `
+The user wants a ${length}-email marketing sequence, not a single email. Plan
+the arc across all ${length} emails so each has a distinct purpose (e.g.
+welcome/hook, value or education, social proof, objection handling,
+urgency/close) — don't repeat the same angle twice. Give each email a
+send_delay relative to the previous one (e.g. "Immediately", "2 days
+later", "5 days later") that reflects realistic pacing for the campaign
+goal. Each email needs its own subject_lines, preheader, body, and
+cta_text, and should read as a self-contained email that also clearly
+continues the sequence's narrative.
+`.trim();
+}
+
 const AI_DISCLOSURE_LINE = "This email was drafted with AI assistance.";
 
 function appendDisclosure(body) {
@@ -248,9 +318,10 @@ function appendDisclosure(body) {
 
 // --------------------------------------------------------------
 // Memory extraction — a small second Groq call after each normal
-// (non-campaign) reply, deciding whether anything durable and
-// personal was said worth remembering next time. Silent no-op on
-// any failure; a missed memory is never worth blocking the reply.
+// (non-campaign, non-sequence) reply, deciding whether anything
+// durable and personal was said worth remembering next time. Silent
+// no-op on any failure; a missed memory is never worth blocking the
+// reply.
 // --------------------------------------------------------------
 const MEMORY_SCHEMA = {
   type: "json_schema",
@@ -268,19 +339,6 @@ const MEMORY_SCHEMA = {
     }
   }
 };
-
-function buildSequenceInstruction(length) {
-  return `
-The user wants a ${length}-email marketing sequence, not a single email. Plan the
-arc across all ${length} emails so each has a distinct purpose (e.g. welcome/hook,
-value or education, social proof, objection handling, urgency/close) — don't repeat
-the same angle twice. Give each email a send_delay relative to the previous one
-(e.g. "Immediately", "2 days later", "5 days later") that reflects realistic
-pacing for the campaign goal. Each email needs its own subject_lines, preheader,
-body, and cta_text, and should read as a self-contained email that also clearly
-continues the sequence's narrative.
-`.trim();
-}
 
 function buildMemoryInstruction(existingMemories) {
   return `
@@ -320,15 +378,6 @@ async function extractMemory(apiKey, userText, assistantText, existingMemories) 
         reasoning_format: "hidden"
       })
     });
-    
-    const REPURPOSE_INSTRUCTION = `
-Also repurpose this campaign into: (1) a single SMS message under 160 characters
-(report the actual character_count) that captures the core offer/CTA in a way
-that reads naturally as a text, not a shrunk email; (2) social captions for
-Instagram, LinkedIn, and X, each matching that platform's natural tone and
-length norms, plus a short relevant hashtag list. Keep the offer and CTA
-consistent across every format — only the tone and length should adapt.
-`.trim();
 
     if (!response.ok) return null;
 
@@ -379,8 +428,8 @@ function buildSystemInstruction(settings = {}) {
     if (bp.voice) brandLines.push(`- Brand voice: ${bp.voice}`);
     if (bp.avoidWords) brandLines.push(`- Never use these words/phrases: ${bp.avoidWords}`);
     if (bp.sampleEmail) brandLines.push(`- Sample past email to match the style of:\n${bp.sampleEmail}`);
-    
-      parts.push(brandLines.join("\n"));
+
+    parts.push(brandLines.join("\n"));
   }
 
   if (Array.isArray(settings.memories) && settings.memories.length > 0) {
@@ -476,6 +525,15 @@ function checkDeliverability(campaign, region = "us") {
     // Default to US / CAN-SPAM rules.
     if (!hasAddress) {
       warnings.push(`No physical mailing address detected — ${regionLabel} requires a valid postal address in every commercial email.`);
+    }
+  }
+
+  // SMS repurposing gets its own soft check — the model sometimes
+  // ignores the 160-char instruction, so verify what it reported.
+  if (campaign.sms && typeof campaign.sms.message === "string") {
+    const actualLength = campaign.sms.message.length;
+    if (actualLength > 160) {
+      warnings.push(`SMS repurpose is ${actualLength} characters — over the 160-char single-segment limit.`);
     }
   }
 
@@ -623,31 +681,6 @@ function getClientIp(req) {
   return req.socket?.remoteAddress || "unknown";
 }
 
-function buildCampaignSchema({ includeLandingPage, includeRepurpose }) {
-  const properties = {
-    subject_lines: { type: "array", items: { type: "string" } },
-    preheader: { type: "string" },
-    body: { type: "string" },
-    cta_text: { type: "string" }
-  };
-  const required = ["subject_lines", "preheader", "body", "cta_text"];
-
-  if (includeLandingPage) {
-    properties.landing_page = LANDING_PAGE_SCHEMA_FIELD; // pull your existing object out as a const
-    required.push("landing_page");
-  }
-  if (includeRepurpose) {
-    properties.sms = REPURPOSE_SCHEMA_FIELDS.sms;
-    properties.social = REPURPOSE_SCHEMA_FIELDS.social;
-    required.push("sms", "social");
-  }
-
-  return {
-    type: "json_schema",
-    json_schema: { name: "email_campaign", strict: true, schema: { type: "object", properties, required, additionalProperties: false } }
-  };
-}
-
 // ---- Vercel handler format ----
 module.exports = async function (req, res) {
   if (req.method !== "POST") {
@@ -659,8 +692,17 @@ module.exports = async function (req, res) {
     return res.status(403).json({ error: "Forbidden" });
   }
 
-  const { messages, settings, mode, includeLandingPage, webSearch } = req.body || {};
-  const requestWeight = getRequestWeight(mode, includeLandingPage);
+  const {
+    messages,
+    settings,
+    mode,
+    includeLandingPage,
+    includeRepurpose,
+    sequenceLength,
+    webSearch
+  } = req.body || {};
+
+  const requestWeight = getRequestWeight(mode, { includeLandingPage, includeRepurpose, sequenceLength });
 
   const authHeader = req.headers.authorization;
   const user = authHeader ? await verifySupabaseToken(authHeader) : null;
@@ -670,41 +712,17 @@ module.exports = async function (req, res) {
     const usage = await checkAndIncrementUsage(user.id, limit, requestWeight);
     if (usage.blocked) {
       return res.status(429).json({
-        error: `You've reached today's limit of ${limit} messages. Resets at midnight.${limit === FREE_DAILY_LIMIT ? " Upgrade to Pro for a higher limit." : ""}${mode === "campaign" ? " Campaigns count as more than one message since they generate more content." : ""}`,
+        error: `You've reached today's limit of ${limit} messages. Resets at midnight.${limit === FREE_DAILY_LIMIT ? " Upgrade to Pro for a higher limit." : ""}${mode === "campaign" || mode === "sequence" ? " Campaigns and sequences count as more than one message since they generate more content." : ""}`,
         code: "USER_LIMIT"
       });
     }
   } else {
     if (Array.isArray(messages) && totalMessageChars(messages) > MAX_GUEST_MESSAGE_CHARS) {
-      
-       return res.status(413).json({
+      return res.status(413).json({
         error: "That message is too long to try as a guest. Sign up for full access.",
         code: "GUEST_LIMIT"
       });
     }
-
-const REPURPOSE_SCHEMA_FIELDS = {
-  sms: {
-    type: "object",
-    properties: {
-      message: { type: "string" },
-      character_count: { type: "integer" }
-    },
-    required: ["message", "character_count"],
-    additionalProperties: false
-  },
-  social: {
-    type: "object",
-    properties: {
-      instagram_caption: { type: "string" },
-      linkedin_caption: { type: "string" },
-      x_caption: { type: "string" },
-      hashtags: { type: "array", items: { type: "string" } }
-    },
-    required: ["instagram_caption", "linkedin_caption", "x_caption", "hashtags"],
-    additionalProperties: false
-  }
-};
 
     const globalUsage = await checkAndIncrementKeyedUsage("__global_guest_cap__", GLOBAL_GUEST_DAILY_CAP);
     if (globalUsage.blocked) {
@@ -732,11 +750,14 @@ const REPURPOSE_SCHEMA_FIELDS = {
     }
 
     const usingTextModel = !conversationHasImage(messages);
+    const isStructuredMode = mode === "campaign" || mode === "sequence";
+    const clampedSequenceLength = Math.min(Math.max(sequenceLength || SEQUENCE_MIN_LENGTH, SEQUENCE_MIN_LENGTH), SEQUENCE_MAX_LENGTH);
 
-    // Only search for normal chat, never for campaign mode (campaign
-    // replies are structured JSON, not a place to splice search context).
+    // Only search for normal chat — never for campaign/sequence mode,
+    // whose replies are structured JSON, not a place to splice search
+    // context into.
     let searchResults = null;
-    if (mode !== "campaign" && webSearch) {
+    if (!isStructuredMode && webSearch) {
       const query = getLatestUserText(messages);
       searchResults = await performWebSearch(query);
     }
@@ -745,8 +766,17 @@ const REPURPOSE_SCHEMA_FIELDS = {
       buildSystemInstruction(settings),
       mode === "campaign" ? CAMPAIGN_INSTRUCTION : "",
       mode === "campaign" && includeLandingPage ? LANDING_PAGE_INSTRUCTION : "",
+      mode === "campaign" && includeRepurpose ? REPURPOSE_INSTRUCTION : "",
+      mode === "sequence" ? buildSequenceInstruction(clampedSequenceLength) : "",
       searchResults ? buildSearchContextBlock(searchResults) : ""
     ].filter(Boolean).join("\n\n");
+
+    let responseFormat;
+    if (mode === "campaign") {
+      responseFormat = buildCampaignSchema({ includeLandingPage, includeRepurpose });
+    } else if (mode === "sequence") {
+      responseFormat = SEQUENCE_SCHEMA;
+    }
 
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -761,9 +791,7 @@ const REPURPOSE_SCHEMA_FIELDS = {
           ...messages
         ],
         ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
-        ...(mode === "campaign"
-          ? { response_format: includeLandingPage ? CAMPAIGN_WITH_LANDING_SCHEMA : CAMPAIGN_SCHEMA }
-          : {})
+        ...(responseFormat ? { response_format: responseFormat } : {})
       })
     });
 
@@ -776,37 +804,39 @@ const REPURPOSE_SCHEMA_FIELDS = {
 
     const rawReply = data.choices?.[0]?.message?.content || "";
 
-        if (mode === "campaign") {
+    if (mode === "campaign") {
       const campaign = JSON.parse(rawReply);
       const warnings = checkDeliverability(campaign, settings?.region);
 
-      if (settings.aiDisclosure) {
+      if (settings?.aiDisclosure) {
         campaign.body = appendDisclosure(campaign.body);
       }
 
-      return res.status(200).json({ campaign, warnings, aiDisclosure: Boolean(settings.aiDisclosure) });
+      return res.status(200).json({ campaign, warnings, aiDisclosure: Boolean(settings?.aiDisclosure) });
+    }
+
+    if (mode === "sequence") {
+      const sequence = JSON.parse(rawReply);
+      const warnings = (sequence.emails || []).map((email) => checkDeliverability(email, settings?.region));
+
+      if (settings?.aiDisclosure) {
+        (sequence.emails || []).forEach((e) => { e.body = appendDisclosure(e.body); });
+      }
+
+      return res.status(200).json({ sequence, warnings, aiDisclosure: Boolean(settings?.aiDisclosure) });
     }
 
     const reply = stripThinkingBlock(rawReply);
     const sources = searchResults
       ? searchResults.map((r) => ({ title: r.title, url: r.url }))
       : [];
-      
-    if (mode === "sequence") {
-  const sequence = JSON.parse(rawReply);
-  const warnings = sequence.emails.map((email) => checkDeliverability(email, settings?.region));
-  if (settings.aiDisclosure) {
-    sequence.emails.forEach((e) => { e.body = appendDisclosure(e.body); });
-  }
-  return res.status(200).json({ sequence, warnings, aiDisclosure: Boolean(settings.aiDisclosure) });
-}
 
     // Only logged-in users have persisted settings for memory to land
     // in, so there's no point spending a second API call on guests.
     let memory = null;
     if (user) {
       const latestUserText = getLatestUserText(messages);
-      const existingMemories = (settings.memories || []).map((m) => m.text);
+      const existingMemories = (settings?.memories || []).map((m) => m.text);
       memory = await extractMemory(apiKey, latestUserText, reply, existingMemories);
     }
 
