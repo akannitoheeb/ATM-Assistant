@@ -358,7 +358,7 @@ toolsCampaignItem.addEventListener("click", () => {
     sequenceMode = false;
   }
   userInput.placeholder = campaignMode
-    ? "Describe the campaign — audience, goal, offer…"
+    ? "Describe the campaign, audience, goal, offer…"
     : "Message ATM Assistant…";
   renderToolsPopupState();
 });
@@ -384,7 +384,7 @@ toolsSequenceItem.addEventListener("click", () => {
     includeRepurpose = false;
   }
   userInput.placeholder = sequenceMode
-    ? "Describe the sequence — audience, goal, and the arc across emails…"
+    ? "Describe the sequence, audience, goal, and the arc across emails…"
     : "Message ATM Assistant…";
   renderToolsPopupState();
 });
@@ -739,7 +739,7 @@ togglePasswordBtn.addEventListener("click", () => {
 function friendlyAuthError(message) {
   const map = {
     "Invalid login credentials": "That email or password doesn't look right. Please try again.",
-    "User already registered": "An account with that email already exists — try logging in instead.",
+    "User already registered": "An account with that email already exists, try logging in instead.",
     "Email not confirmed": "Please confirm your email before logging in.",
     "Password should be at least 6 characters.": "Your password needs to be at least 6 characters."
   };
@@ -1139,7 +1139,7 @@ function applySettingsToForm() {
   customInstruction.value = settings.customInstruction;
 
   const bp = getActiveBrandProfile() || emptyBrandProfile();
-  brandProfileLabel.textContent = `Brand Profile — ${getActiveProjectName()}`;
+  brandProfileLabel.textContent = `Brand Profile, ${getActiveProjectName()}`;
   brandName.value = bp.name;
   brandIndustry.value = bp.industry;
   brandAudience.value = bp.audience;
@@ -1903,7 +1903,7 @@ function sequenceToText(sequence) {
   (sequence.emails || []).forEach((email, i) => {
     if (i > 0) parts.push("", "===================", "");
     parts.push(
-      `Email ${email.step_number} — ${email.purpose || ""} (${email.send_delay || ""})`,
+      `Email ${email.step_number}, ${email.purpose || ""} (${email.send_delay || ""})`,
       "",
       "Subject line options:",
       ...(email.subject_lines || []).map((s) => "- " + s),
@@ -1981,7 +1981,7 @@ card.appendChild(campaignField("Call to action", campaign.cta_text));
 
     if (campaign.sms) {
       const overLimit = (campaign.sms.character_count || campaign.sms.message.length) > 160;
-      const smsLabel = `SMS (${campaign.sms.character_count || campaign.sms.message.length} chars${overLimit ? " — over limit" : ""})`;
+      const smsLabel = `SMS (${campaign.sms.character_count || campaign.sms.message.length} chars${overLimit ? ", over limit" : ""})`;
       card.appendChild(campaignField(smsLabel, campaign.sms.message));
     }
 
@@ -2046,8 +2046,8 @@ card.appendChild(campaignField("Call to action", campaign.cta_text));
     refineError.className = "campaign-refine-error hidden";
 
     const refineOptions = [
-      { label: "Make it shorter", instruction: "Make it noticeably shorter and tighter — cut anything that isn't pulling its weight, while keeping the core message and CTA intact." },
-      { label: "Make it punchier", instruction: "Make it punchier and more energetic — sharper hooks, more active language, stronger urgency in the CTA — without resorting to spammy phrasing." }
+      { label: "Make it shorter", instruction: "Make it noticeably shorter and tighter, cut anything that isn't pulling its weight, while keeping the core message and CTA intact." },
+      { label: "Make it punchier", instruction: "Make it punchier and more energetic, sharper hooks, more active language, stronger urgency in the CTA, without resorting to spammy phrasing." }
     ];
 
     refineOptions.forEach(({ label, instruction }) => {
