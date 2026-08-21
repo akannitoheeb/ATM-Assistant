@@ -463,6 +463,7 @@ const settingsOverlay = document.getElementById("settingsOverlay");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
 const saveSettingsBtn = document.getElementById("saveSettingsBtn");
 const toneSelect = document.getElementById("toneSelect");
+const regionSelect = document.getElementById("regionSelect");
 const nigeriaToggle = document.getElementById("nigeriaToggle");
 const customInstruction = document.getElementById("customInstruction");
 const memoryList = document.getElementById("memoryList");
@@ -578,7 +579,8 @@ function defaultSettings() {
     projects: [],
     memories: [],
     aiDisclosure: true,
-    onboarded: false
+    onboarded: false,
+    region: "us"
   };
 }
 
@@ -950,6 +952,7 @@ async function loadUserData() {
     // default alone won't re-trigger the wizard for anyone who already
     // has brand info saved — only for genuinely blank, pre-feature profiles.
     settings.onboarded = settings.onboarded === undefined ? false : settings.onboarded;
+    settings.region = settings.region || "us";
   } catch (error) {
     console.error("Failed to load data:", error);
     sessions = [];
@@ -1047,6 +1050,7 @@ settingsOverlay.addEventListener("click", (event) => {
 
 saveSettingsBtn.addEventListener("click", () => {
   settings.tone = toneSelect.value;
+  settings.region = regionSelect.value;
   settings.emphasizeNigeria = nigeriaToggle.checked;
   settings.aiDisclosure = aiDisclosureToggle.checked;
   settings.customInstruction = customInstruction.value.trim();
@@ -1073,6 +1077,7 @@ saveSettingsBtn.addEventListener("click", () => {
 
 function applySettingsToForm() {
   toneSelect.value = settings.tone;
+  regionSelect.value = settings.region || "us";
   nigeriaToggle.checked = settings.emphasizeNigeria;
   aiDisclosureToggle.checked = settings.aiDisclosure;
   customInstruction.value = settings.customInstruction;
