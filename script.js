@@ -362,6 +362,71 @@ const saveSettingsBtn = document.getElementById("saveSettingsBtn");
 const toneSelect = document.getElementById("toneSelect");
 const nigeriaToggle = document.getElementById("nigeriaToggle");
 const customInstruction = document.getElementById("customInstruction");
+const memoryList = document.getElementById("memoryList");
+const memoryInput = document.getElementById("memoryInput");
+const addMemoryBtn = document.getElementById("addMemoryBtn");
+const clearMemoryBtn = document.getElementById("clearMemoryBtn");
+
+function renderMemoryList() {
+  memoryList.innerHTML = "";
+  const memories = settings.memories || [];
+
+  if (memories.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "memory-empty";
+    empty.textContent = "Nothing remembered yet.";
+    memoryList.appendChild(empty);
+    return;
+  }
+
+  memories.forEach((mem) => {
+    const row = document.createElement("div");
+    row.className = "memory-item";
+
+    const text = document.createElement("span");
+    text.className = "memory-item-text";
+    text.textContent = mem.text;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "memory-item-delete";
+    deleteBtn.textContent = "✕";
+    deleteBtn.setAttribute("aria-label", "Forget this");
+    deleteBtn.addEventListener("click", () => {
+      settings.memories = settings.memories.filter((m) => m.id !== mem.id);
+      saveUserData();
+      renderMemoryList();
+    });
+
+    row.appendChild(text);
+    row.appendChild(deleteBtn);
+    memoryList.appendChild(row);
+  });
+}
+
+addMemoryBtn.addEventListener("click", () => {
+  const text = memoryInput.value.trim();
+  if (!text) return;
+  settings.memories = settings.memories || [];
+  settings.memories.push({ id: Date.now().toString(), text, createdAt: new Date().toISOString() });
+  memoryInput.value = "";
+  saveUserData();
+  renderMemoryList();
+});
+
+memoryInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    addMemoryBtn.click();
+  }
+});
+
+clearMemoryBtn.addEventListener("click", () => {
+  if (!confirm("Forget everything ATM Assistant remembers about you?")) return;
+  settings.memories = [];
+  saveUserData();
+  renderMemoryList();
+});
 
 // --------------------------------------------------------------
 // App state
@@ -384,7 +449,7 @@ function defaultSettings() {
       avoidWords: "",
       sampleEmail: ""
     },
-    projects: []
+    projects: [],\nmemories: []
   };
 }
 
@@ -672,6 +737,7 @@ function showGuestMode() {
   activeProjectId = null;
   activeProjectLabel.textContent = "General";
   applySettingsToForm();
+  renderMemoryList();
 }
 
 // --------------------------------------------------------------
@@ -744,6 +810,7 @@ async function loadUserData() {
     settings = (data && data.settings) || defaultSettings();
     settings.projects = settings.projects || [];
     settings.brandProfile = settings.brandProfile || emptyBrandProfile();
+    settings.memories = settings.memories || [];
   } catch (error) {
     console.error("Failed to load data:", error);
     sessions = [];
@@ -1140,11 +1207,18 @@ async function handleSend(event) {
       });
       saveUserData();
       renderActiveChat();
-    } else {
+        } else {
       session.messages.push({ role: "assistant", content: result.reply, sources: result.sources });
+
+      if (result.memory) {
+        settings.memories = settings.memories || [];
+        settings.memories.push({ id: Date.now().toString(), text: result.memory, createdAt: new Date().toISOString() });
+      }
+
       saveUserData();
       renderActiveChat({ typeLast: true });
     }
+    
   } catch (error) {
     console.error(error);
 
@@ -1197,8 +1271,8 @@ async function handleSend(event) {
     return { campaign: data.campaign, warnings: data.warnings || [] };
   }
 
-  if (!data.reply) throw new Error("No text returned from the API.");
-  return { reply: data.reply.trim(), sources: data.sources || [] };
+    if (!data.reply) throw new Error("No text returned from the API.");
+  return { reply: data.reply.trim(), sources: data.sources || [], memory: data.memory || null };
 }
 
 // --------------------------------------------------------------
