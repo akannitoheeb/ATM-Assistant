@@ -196,6 +196,14 @@ benefits, social proof, or FAQs), and a landing page CTA button text.
 Keep the landing page's tone and message consistent with the email itself.
 `.trim();
 
+const AI_DISCLOSURE_LINE = "This email was drafted with AI assistance.";
+
+function appendDisclosure(body) {
+  if (!body) return body;
+  if (body.includes(AI_DISCLOSURE_LINE)) return body; // avoid duplicating on retries
+  return `${body}\n\n${AI_DISCLOSURE_LINE}`;
+}
+
 // --------------------------------------------------------------
 // Memory extraction — a small second Groq call after each normal
 // (non-campaign) reply, deciding whether anything durable and
@@ -603,10 +611,15 @@ module.exports = async function (req, res) {
 
     const rawReply = data.choices?.[0]?.message?.content || "";
 
-    if (mode === "campaign") {
+        if (mode === "campaign") {
       const campaign = JSON.parse(rawReply);
       const warnings = checkDeliverability(campaign);
-      return res.status(200).json({ campaign, warnings });
+
+      if (settings.aiDisclosure) {
+        campaign.body = appendDisclosure(campaign.body);
+      }
+
+      return res.status(200).json({ campaign, warnings, aiDisclosure: Boolean(settings.aiDisclosure) });
     }
 
         const reply = stripThinkingBlock(rawReply);
