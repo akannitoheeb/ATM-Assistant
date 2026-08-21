@@ -366,6 +366,7 @@ const memoryList = document.getElementById("memoryList");
 const memoryInput = document.getElementById("memoryInput");
 const addMemoryBtn = document.getElementById("addMemoryBtn");
 const clearMemoryBtn = document.getElementById("clearMemoryBtn");
+const aiDisclosureToggle = document.getElementById("aiDisclosureToggle");
 const settingsTabs = document.querySelectorAll(".settings-tab");
 const settingsPanels = document.querySelectorAll(".settings-panel");
 
@@ -472,7 +473,8 @@ function defaultSettings() {
       sampleEmail: ""
     },
     projects: [],
-    memories: []
+    memories: [],
+    aiDisclosure: true
   };
 }
 
@@ -834,6 +836,7 @@ async function loadUserData() {
     settings.projects = settings.projects || [];
     settings.brandProfile = settings.brandProfile || emptyBrandProfile();
     settings.memories = settings.memories || [];
+    settings.aiDisclosure = settings.aiDisclosure === undefined ? true : settings.aiDisclosure;
   } catch (error) {
     console.error("Failed to load data:", error);
     sessions = [];
@@ -932,6 +935,7 @@ settingsOverlay.addEventListener("click", (event) => {
 saveSettingsBtn.addEventListener("click", () => {
   settings.tone = toneSelect.value;
   settings.emphasizeNigeria = nigeriaToggle.checked;
+  settings.aiDisclosure = aiDisclosureToggle.checked;
   settings.customInstruction = customInstruction.value.trim();
 
   const newBrandProfile = {
@@ -957,6 +961,7 @@ saveSettingsBtn.addEventListener("click", () => {
 function applySettingsToForm() {
   toneSelect.value = settings.tone;
   nigeriaToggle.checked = settings.emphasizeNigeria;
+  aiDisclosureToggle.checked = settings.aiDisclosure;
   customInstruction.value = settings.customInstruction;
 
   const bp = getActiveBrandProfile() || emptyBrandProfile();
@@ -1221,14 +1226,16 @@ async function handleSend(event) {
   try {
     const result = await callGroqAPI(session.messages, mode, useWebSearch);
 
-    if (mode === "campaign") {
+      if (mode === "campaign") {
       session.messages.push({
         role: "assistant",
         content: campaignToText(result.campaign),
         campaignData: result.campaign,
         warnings: result.warnings,
+        aiDisclosure: result.aiDisclosure,
         kind: "campaign"
       });
+      
       saveUserData();
       renderActiveChat();
         } else {
@@ -1292,7 +1299,7 @@ async function handleSend(event) {
 
   if (mode === "campaign") {
     if (!data.campaign) throw new Error("No campaign data returned from the API.");
-    return { campaign: data.campaign, warnings: data.warnings || [] };
+    return { campaign: data.campaign, warnings: data.warnings || [], aiDisclosure: Boolean(data.aiDisclosure) };
   }
 
     if (!data.reply) throw new Error("No text returned from the API.");
@@ -1413,7 +1420,7 @@ function renderActiveChat(options = {}) {
 
   session.messages.forEach((msg, index) => {
     if (msg.kind === "campaign") {
-      addCampaignCardToDOM(msg.campaignData, msg.warnings);
+      addCampaignCardToDOM(msg.campaignData, msg.warnings, msg.aiDisclosure);
       return;
     }
     const role = msg.role === "user" ? "user" : "assistant";
@@ -1555,7 +1562,7 @@ function campaignToText(campaign) {
   return parts.join("\n");
 }
 
-function addCampaignCardToDOM(campaign, warnings) {
+function addCampaignCardToDOM(campaign, warnings, aiDisclosure) {
   const wrapper = document.createElement("div");
   wrapper.className = "message assistant";
 
@@ -1569,8 +1576,14 @@ function addCampaignCardToDOM(campaign, warnings) {
   const card = document.createElement("div");
   card.className = "campaign-card";
 
+  if (aiDisclosure) {
+    const badge = document.createElement("div");
+    badge.className = "ai-disclosure-badge";
+    badge.textContent = "AI-assisted";
+    card.appendChild(badge);
+  }
+
   const subjectSection = document.createElement("div");
-  subjectSection.className = "campaign-section";
   const subjectLabel = document.createElement("div");
   subjectLabel.className = "campaign-label";
   subjectLabel.textContent = "Subject lines";
