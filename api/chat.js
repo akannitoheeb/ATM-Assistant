@@ -28,6 +28,14 @@ const VISION_MODEL = "qwen/qwen3.6-27b";
 const ALLOWED_ORIGIN = "https://assistant.toheebakanni.name.ng";
 const MAX_GUEST_MESSAGE_CHARS = 4000;
 const GLOBAL_GUEST_DAILY_CAP = 300;
+const NORMAL_MESSAGE_WEIGHT = 1;
+const CAMPAIGN_MESSAGE_WEIGHT = 2;
+const CAMPAIGN_LANDING_MESSAGE_WEIGHT = 3;
+
+function getRequestWeight(mode, includeLandingPage) {
+  if (mode !== "campaign") return NORMAL_MESSAGE_WEIGHT;
+  return includeLandingPage ? CAMPAIGN_LANDING_MESSAGE_WEIGHT : CAMPAIGN_MESSAGE_WEIGHT;
+}
 
 function conversationHasImage(messages) {
   return messages.some(
@@ -420,7 +428,7 @@ async function getUserPlanLimit(userId) {
   return isActivePro ? PRO_DAILY_LIMIT : FREE_DAILY_LIMIT;
 }
 
-async function checkAndIncrementUsage(userId, limit) {
+async function checkAndIncrementUsage(userId, limit, weight) {
   const today = new Date().toISOString().slice(0, 10);
   const headers = supabaseHeaders();
 
@@ -435,7 +443,7 @@ async function checkAndIncrementUsage(userId, limit) {
     await fetch(`${SUPABASE_URL}/rest/v1/usage_limits`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ user_id: userId, message_count: 1, reset_date: today })
+      body: JSON.stringify({ user_id: userId, message_count: weight, reset_date: today })
     });
     return { blocked: false };
   }
@@ -444,19 +452,22 @@ async function checkAndIncrementUsage(userId, limit) {
     await fetch(`${SUPABASE_URL}/rest/v1/usage_limits?user_id=eq.${userId}`, {
       method: "PATCH",
       headers,
-      body: JSON.stringify({ message_count: 1, reset_date: today })
+      body: JSON.stringify({ message_count: weight, reset_date: today })
     });
     return { blocked: false };
   }
 
-  if (row.message_count >= limit) {
+  // Blocks if THIS request would push them over, not just if they're
+  // already at the cap — so a landing-page campaign near the limit
+  // can't sneak through and leave the count over budget.
+  if (row.message_count + weight > limit) {
     return { blocked: true };
   }
 
   await fetch(`${SUPABASE_URL}/rest/v1/usage_limits?user_id=eq.${userId}`, {
     method: "PATCH",
     headers,
-    body: JSON.stringify({ message_count: row.message_count + 1 })
+    body: JSON.stringify({ message_count: row.message_count + weight })
   });
   return { blocked: false };
 }
@@ -519,22 +530,25 @@ module.exports = async function (req, res) {
     return res.status(403).json({ error: "Forbidden" });
   }
 
+    const { messages, settings, mode, includeLandingPage, webSearch } = req.body || {};
+  const requestWeight = getRequestWeight(mode, includeLandingPage);
+
   const authHeader = req.headers.authorization;
   const user = authHeader ? await verifySupabaseToken(authHeader) : null;
 
   if (user) {
     const limit = await getUserPlanLimit(user.id);
-    const usage = await checkAndIncrementUsage(user.id, limit);
+    const usage = await checkAndIncrementUsage(user.id, limit, requestWeight);
     if (usage.blocked) {
       return res.status(429).json({
-        error: `You've reached today's limit of ${limit} messages. Resets at midnight.${limit === FREE_DAILY_LIMIT ? " Upgrade to Pro for a higher limit." : ""}`,
+        error: `You've reached today's limit of ${limit} messages. Resets at midnight.${limit === FREE_DAILY_LIMIT ? " Upgrade to Pro for a higher limit." : ""}${mode === "campaign" ? " Campaigns count as more than one message since they generate more content." : ""}`,
         code: "USER_LIMIT"
       });
     }
   } else {
-    const { messages: incomingMessages } = req.body || {};
-    if (Array.isArray(incomingMessages) && totalMessageChars(incomingMessages) > MAX_GUEST_MESSAGE_CHARS) {
-      return res.status(413).json({
+    if (Array.isArray(messages) && totalMessageChars(messages) > MAX_GUEST_MESSAGE_CHARS) {
+      
+       return res.status(413).json({
         error: "That message is too long to try as a guest. Sign up for full access.",
         code: "GUEST_LIMIT"
       });
@@ -559,7 +573,6 @@ module.exports = async function (req, res) {
   }
 
   try {
-    const { messages, settings, mode, includeLandingPage, webSearch } = req.body;
     const apiKey = process.env.GROQ_API_KEY;
 
     if (!apiKey) {
