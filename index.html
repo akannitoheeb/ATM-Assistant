@@ -265,12 +265,26 @@
           <label class="field-label" for="brandAvoidWords">Words/phrases to avoid</label>
           <input type="text" id="brandAvoidWords" placeholder="e.g. cheap, discount, hurry" />
 
-          <label class="field-label" for="brandSampleEmail">Sample past email (optional)</label>
+                   <label class="field-label" for="brandSampleEmail">Sample past email (optional)</label>
           <textarea
             id="brandSampleEmail"
             rows="3"
             placeholder="Paste a past email so the AI can match your style"
           ></textarea>
+
+          <div class="settings-divider">
+            <span>Memory</span>
+          </div>
+          <p class="settings-hint">Facts ATM Assistant has picked up about you — used in every conversation, across all your projects.</p>
+
+          <div id="memoryList" class="memory-list"></div>
+
+          <div class="memory-add-row">
+            <input type="text" id="memoryInput" placeholder="Add something for it to remember…" />
+            <button type="button" id="addMemoryBtn" class="memory-add-btn">Add</button>
+          </div>
+
+          <button type="button" id="clearMemoryBtn" class="memory-clear-btn">Clear all memories</button>
         </div>
 
         <div class="modal-footer">
