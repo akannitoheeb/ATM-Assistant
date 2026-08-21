@@ -32,7 +32,8 @@ const NORMAL_MESSAGE_WEIGHT = 1;
 const CAMPAIGN_MESSAGE_WEIGHT = 2;
 const CAMPAIGN_LANDING_MESSAGE_WEIGHT = 3;
 
-function getRequestWeight(mode, includeLandingPage) {
+function getRequestWeight(mode, includeLandingPage, sequenceLength) {
+  if (mode === "sequence") return Math.min(sequenceLength || 3, 5); // 1 credit per email, capped
   if (mode !== "campaign") return NORMAL_MESSAGE_WEIGHT;
   return includeLandingPage ? CAMPAIGN_LANDING_MESSAGE_WEIGHT : CAMPAIGN_MESSAGE_WEIGHT;
 }
@@ -160,6 +161,39 @@ const CAMPAIGN_SCHEMA = {
   }
 };
 
+const SEQUENCE_SCHEMA = {
+  type: "json_schema",
+  json_schema: {
+    name: "email_sequence",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        sequence_name: { type: "string" },
+        emails: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              step_number: { type: "integer" },
+              send_delay: { type: "string" }, // e.g. "Immediately", "Day 2", "Day 5"
+              purpose: { type: "string" },    // e.g. "Welcome", "Social proof", "Urgency/close"
+              subject_lines: { type: "array", items: { type: "string" } },
+              preheader: { type: "string" },
+              body: { type: "string" },
+              cta_text: { type: "string" }
+            },
+            required: ["step_number", "send_delay", "purpose", "subject_lines", "preheader", "body", "cta_text"],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ["sequence_name", "emails"],
+      additionalProperties: false
+    }
+  }
+};
+
 const CAMPAIGN_WITH_LANDING_SCHEMA = {
   type: "json_schema",
   json_schema: {
@@ -235,6 +269,19 @@ const MEMORY_SCHEMA = {
   }
 };
 
+function buildSequenceInstruction(length) {
+  return `
+The user wants a ${length}-email marketing sequence, not a single email. Plan the
+arc across all ${length} emails so each has a distinct purpose (e.g. welcome/hook,
+value or education, social proof, objection handling, urgency/close) — don't repeat
+the same angle twice. Give each email a send_delay relative to the previous one
+(e.g. "Immediately", "2 days later", "5 days later") that reflects realistic
+pacing for the campaign goal. Each email needs its own subject_lines, preheader,
+body, and cta_text, and should read as a self-contained email that also clearly
+continues the sequence's narrative.
+`.trim();
+}
+
 function buildMemoryInstruction(existingMemories) {
   return `
 You extract durable, personal facts worth remembering about a user from a
@@ -273,6 +320,15 @@ async function extractMemory(apiKey, userText, assistantText, existingMemories) 
         reasoning_format: "hidden"
       })
     });
+    
+    const REPURPOSE_INSTRUCTION = `
+Also repurpose this campaign into: (1) a single SMS message under 160 characters
+(report the actual character_count) that captures the core offer/CTA in a way
+that reads naturally as a text, not a shrunk email; (2) social captions for
+Instagram, LinkedIn, and X, each matching that platform's natural tone and
+length norms, plus a short relevant hashtag list. Keep the offer and CTA
+consistent across every format — only the tone and length should adapt.
+`.trim();
 
     if (!response.ok) return null;
 
@@ -567,6 +623,31 @@ function getClientIp(req) {
   return req.socket?.remoteAddress || "unknown";
 }
 
+function buildCampaignSchema({ includeLandingPage, includeRepurpose }) {
+  const properties = {
+    subject_lines: { type: "array", items: { type: "string" } },
+    preheader: { type: "string" },
+    body: { type: "string" },
+    cta_text: { type: "string" }
+  };
+  const required = ["subject_lines", "preheader", "body", "cta_text"];
+
+  if (includeLandingPage) {
+    properties.landing_page = LANDING_PAGE_SCHEMA_FIELD; // pull your existing object out as a const
+    required.push("landing_page");
+  }
+  if (includeRepurpose) {
+    properties.sms = REPURPOSE_SCHEMA_FIELDS.sms;
+    properties.social = REPURPOSE_SCHEMA_FIELDS.social;
+    required.push("sms", "social");
+  }
+
+  return {
+    type: "json_schema",
+    json_schema: { name: "email_campaign", strict: true, schema: { type: "object", properties, required, additionalProperties: false } }
+  };
+}
+
 // ---- Vercel handler format ----
 module.exports = async function (req, res) {
   if (req.method !== "POST") {
@@ -578,7 +659,7 @@ module.exports = async function (req, res) {
     return res.status(403).json({ error: "Forbidden" });
   }
 
-    const { messages, settings, mode, includeLandingPage, webSearch } = req.body || {};
+  const { messages, settings, mode, includeLandingPage, webSearch } = req.body || {};
   const requestWeight = getRequestWeight(mode, includeLandingPage);
 
   const authHeader = req.headers.authorization;
@@ -601,6 +682,29 @@ module.exports = async function (req, res) {
         code: "GUEST_LIMIT"
       });
     }
+
+const REPURPOSE_SCHEMA_FIELDS = {
+  sms: {
+    type: "object",
+    properties: {
+      message: { type: "string" },
+      character_count: { type: "integer" }
+    },
+    required: ["message", "character_count"],
+    additionalProperties: false
+  },
+  social: {
+    type: "object",
+    properties: {
+      instagram_caption: { type: "string" },
+      linkedin_caption: { type: "string" },
+      x_caption: { type: "string" },
+      hashtags: { type: "array", items: { type: "string" } }
+    },
+    required: ["instagram_caption", "linkedin_caption", "x_caption", "hashtags"],
+    additionalProperties: false
+  }
+};
 
     const globalUsage = await checkAndIncrementKeyedUsage("__global_guest_cap__", GLOBAL_GUEST_DAILY_CAP);
     if (globalUsage.blocked) {
@@ -683,10 +787,19 @@ module.exports = async function (req, res) {
       return res.status(200).json({ campaign, warnings, aiDisclosure: Boolean(settings.aiDisclosure) });
     }
 
-        const reply = stripThinkingBlock(rawReply);
+    const reply = stripThinkingBlock(rawReply);
     const sources = searchResults
       ? searchResults.map((r) => ({ title: r.title, url: r.url }))
       : [];
+      
+    if (mode === "sequence") {
+  const sequence = JSON.parse(rawReply);
+  const warnings = sequence.emails.map((email) => checkDeliverability(email, settings?.region));
+  if (settings.aiDisclosure) {
+    sequence.emails.forEach((e) => { e.body = appendDisclosure(e.body); });
+  }
+  return res.status(200).json({ sequence, warnings, aiDisclosure: Boolean(settings.aiDisclosure) });
+}
 
     // Only logged-in users have persisted settings for memory to land
     // in, so there's no point spending a second API call on guests.
