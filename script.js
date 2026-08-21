@@ -56,6 +56,9 @@ const historySearchInput = document.getElementById("historySearchInput");
 let historyFilter = "";
 let campaignMode = false;
 let includeLandingPage = false;
+let includeRepurpose = false;
+let sequenceMode = false;
+let sequenceLength = 3; // 3-5, adjustable via the tools popup stepper
 
 historySearchInput.addEventListener("input", () => {
   historyFilter = historySearchInput.value.trim().toLowerCase();
@@ -287,6 +290,9 @@ const toolsPopup = document.getElementById("toolsPopup");
 const toolsAttachItem = document.getElementById("toolsAttachItem");
 const toolsCampaignItem = document.getElementById("toolsCampaignItem");
 const toolsLandingItem = document.getElementById("toolsLandingItem");
+const toolsRepurposeItem = document.getElementById("toolsRepurposeItem");
+const toolsSequenceItem = document.getElementById("toolsSequenceItem");
+const toolsSequenceLengthRow = document.getElementById("toolsSequenceLengthRow");
 const toolsWebSearchItem = document.getElementById("toolsWebSearchItem");
 let webSearchMode = false;
 
@@ -318,10 +324,22 @@ function renderToolsPopupState() {
   toolsLandingItem.classList.toggle("active", includeLandingPage);
   toolsLandingItem.setAttribute("aria-pressed", String(includeLandingPage));
 
+  toolsRepurposeItem.classList.toggle("hidden", !campaignMode);
+  toolsRepurposeItem.classList.toggle("active", includeRepurpose);
+  toolsRepurposeItem.setAttribute("aria-pressed", String(includeRepurpose));
+
+  toolsSequenceItem.classList.toggle("active", sequenceMode);
+  toolsSequenceItem.setAttribute("aria-pressed", String(sequenceMode));
+
+  toolsSequenceLengthRow.classList.toggle("hidden", !sequenceMode);
+  toolsSequenceLengthRow.querySelectorAll(".sequence-length-btn").forEach((btn) => {
+    btn.classList.toggle("active", Number(btn.dataset.length) === sequenceLength);
+  });
+
   toolsWebSearchItem.classList.toggle("active", webSearchMode);
   toolsWebSearchItem.setAttribute("aria-pressed", String(webSearchMode));
 
-  toolsBtn.classList.toggle("has-active", campaignMode || webSearchMode);
+  toolsBtn.classList.toggle("has-active", campaignMode || sequenceMode || webSearchMode);
 }
 
 toolsAttachItem.addEventListener("click", () => {
@@ -331,7 +349,14 @@ toolsAttachItem.addEventListener("click", () => {
 
 toolsCampaignItem.addEventListener("click", () => {
   campaignMode = !campaignMode;
-  if (!campaignMode) includeLandingPage = false;
+  if (!campaignMode) {
+    includeLandingPage = false;
+    includeRepurpose = false;
+  } else {
+    // Campaign and sequence are mutually exclusive — a single message
+    // is either one email or a multi-email flow, not both.
+    sequenceMode = false;
+  }
   userInput.placeholder = campaignMode
     ? "Describe the campaign — audience, goal, offer…"
     : "Message ATM Assistant…";
@@ -344,6 +369,34 @@ toolsLandingItem.addEventListener("click", () => {
   renderToolsPopupState();
 });
 
+toolsRepurposeItem.addEventListener("click", () => {
+  if (!campaignMode) return;
+  includeRepurpose = !includeRepurpose;
+  renderToolsPopupState();
+});
+
+toolsSequenceItem.addEventListener("click", () => {
+  sequenceMode = !sequenceMode;
+  if (sequenceMode) {
+    // Same mutual exclusion in the other direction.
+    campaignMode = false;
+    includeLandingPage = false;
+    includeRepurpose = false;
+  }
+  userInput.placeholder = sequenceMode
+    ? "Describe the sequence — audience, goal, and the arc across emails…"
+    : "Message ATM Assistant…";
+  renderToolsPopupState();
+});
+
+toolsSequenceLengthRow.querySelectorAll(".sequence-length-btn").forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation(); // don't let this bubble up and close the popup
+    sequenceLength = Number(btn.dataset.length);
+    renderToolsPopupState();
+  });
+});
+
 toolsWebSearchItem.addEventListener("click", () => {
   webSearchMode = !webSearchMode;
   renderToolsPopupState();
@@ -352,6 +405,9 @@ toolsWebSearchItem.addEventListener("click", () => {
 function resetCampaignMode() {
   campaignMode = false;
   includeLandingPage = false;
+  includeRepurpose = false;
+  sequenceMode = false;
+  sequenceLength = 3;
   userInput.placeholder = "Message ATM Assistant…";
   renderToolsPopupState();
 }
@@ -1425,7 +1481,7 @@ async function handleSend(event) {
   setLoading(true);
   addTypingIndicator();
 
-  const mode = campaignMode ? "campaign" : undefined;
+  const mode = campaignMode ? "campaign" : (sequenceMode ? "sequence" : undefined);
   const useWebSearch = webSearchMode;
 
   try {
@@ -1441,6 +1497,18 @@ async function handleSend(event) {
         kind: "campaign"
       });
       
+      saveUserData();
+      renderActiveChat();
+        } else if (mode === "sequence") {
+      session.messages.push({
+        role: "assistant",
+        content: sequenceToText(result.sequence),
+        sequenceData: result.sequence,
+        warnings: result.warnings,
+        aiDisclosure: result.aiDisclosure,
+        kind: "sequence"
+      });
+
       saveUserData();
       renderActiveChat();
         } else {
@@ -1476,12 +1544,23 @@ async function handleSend(event) {
 // API call
 // --------------------------------------------------------------
 
-  async function callGroqAPI(messages, mode, useWebSearch, includeLandingPageOverride) {
+  async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides) {
   const authHeaders = await getAuthHeaders();
 
   const cleanMessages = messages.map((msg) => ({ role: msg.role, content: msg.content }));
   const settingsForRequest = { ...settings, brandProfile: getActiveBrandProfile() };
-  const landingFlag = includeLandingPageOverride !== undefined ? includeLandingPageOverride : includeLandingPage;
+
+  // campaignOverrides lets a refine-in-place call pin the exact add-ons
+  // of the campaign it's regenerating, instead of reading current UI
+  // toggle state (which may have moved on since the original send).
+  const landingFlag = campaignOverrides?.includeLandingPage !== undefined
+    ? campaignOverrides.includeLandingPage
+    : includeLandingPage;
+  const repurposeFlag = campaignOverrides?.includeRepurpose !== undefined
+    ? campaignOverrides.includeRepurpose
+    : includeRepurpose;
+
+  const isStructuredMode = mode === "campaign" || mode === "sequence";
 
   const response = await fetch(CHAT_API_URL, {
     method: "POST",
@@ -1491,7 +1570,9 @@ async function handleSend(event) {
       settings: settingsForRequest,
       mode,
       includeLandingPage: mode === "campaign" ? landingFlag : undefined,
-      webSearch: mode === "campaign" ? undefined : Boolean(useWebSearch)
+      includeRepurpose: mode === "campaign" ? repurposeFlag : undefined,
+      sequenceLength: mode === "sequence" ? sequenceLength : undefined,
+      webSearch: isStructuredMode ? undefined : Boolean(useWebSearch)
     })
   });
 
@@ -1506,6 +1587,11 @@ async function handleSend(event) {
   if (mode === "campaign") {
     if (!data.campaign) throw new Error("No campaign data returned from the API.");
     return { campaign: data.campaign, warnings: data.warnings || [], aiDisclosure: Boolean(data.aiDisclosure) };
+  }
+
+  if (mode === "sequence") {
+    if (!data.sequence) throw new Error("No sequence data returned from the API.");
+    return { sequence: data.sequence, warnings: data.warnings || [], aiDisclosure: Boolean(data.aiDisclosure) };
   }
 
     if (!data.reply) throw new Error("No text returned from the API.");
@@ -1628,6 +1714,10 @@ function renderActiveChat(options = {}) {
     if (msg.kind === "campaign") {
       const isLastCampaign = index === session.messages.length - 1;
       addCampaignCardToDOM(msg.campaignData, msg.warnings, msg.aiDisclosure, index, isLastCampaign);
+      return;
+    }
+    if (msg.kind === "sequence") {
+      addSequenceCardToDOM(msg.sequenceData, msg.warnings, msg.aiDisclosure);
       return;
     }
     const role = msg.role === "user" ? "user" : "assistant";
@@ -1778,6 +1868,54 @@ function campaignToText(campaign) {
     );
   }
 
+  if (campaign.sms) {
+    parts.push(
+      "",
+      "--- SMS ---",
+      campaign.sms.message || ""
+    );
+  }
+
+  if (campaign.social) {
+    const s = campaign.social;
+    parts.push(
+      "",
+      "--- Social captions ---",
+      "Instagram: " + (s.instagram_caption || ""),
+      "",
+      "LinkedIn: " + (s.linkedin_caption || ""),
+      "",
+      "X: " + (s.x_caption || ""),
+      "",
+      "Hashtags: " + (s.hashtags || []).join(" ")
+    );
+  }
+
+  return parts.join("\n");
+}
+
+// Flattens a sequence into copyable plain text — each email in full,
+// separated by its step number and send delay so the pacing stays
+// legible outside the app (e.g. pasted into an ESP or a doc).
+function sequenceToText(sequence) {
+  const parts = [sequence.sequence_name || "Email sequence", ""];
+
+  (sequence.emails || []).forEach((email, i) => {
+    if (i > 0) parts.push("", "===================", "");
+    parts.push(
+      `Email ${email.step_number} — ${email.purpose || ""} (${email.send_delay || ""})`,
+      "",
+      "Subject line options:",
+      ...(email.subject_lines || []).map((s) => "- " + s),
+      "",
+      "Preheader: " + (email.preheader || ""),
+      "",
+      email.body || "",
+      "",
+      "CTA: " + (email.cta_text || "")
+    );
+  });
+
   return parts.join("\n");
 }
 
@@ -1833,6 +1971,28 @@ card.appendChild(campaignField("Call to action", campaign.cta_text));
     card.appendChild(campaignField("Subheadline", lp.subheadline));
     card.appendChild(campaignField("Page sections", (lp.sections || []).join("\n\n"), true));
     card.appendChild(campaignField("Landing page CTA", lp.landing_cta_text));
+  }
+
+  if (campaign.sms || campaign.social) {
+    const repurposeDivider = document.createElement("div");
+    repurposeDivider.className = "campaign-lp-divider";
+    repurposeDivider.textContent = "Repurposed for other channels";
+    card.appendChild(repurposeDivider);
+
+    if (campaign.sms) {
+      const overLimit = (campaign.sms.character_count || campaign.sms.message.length) > 160;
+      const smsLabel = `SMS (${campaign.sms.character_count || campaign.sms.message.length} chars${overLimit ? " — over limit" : ""})`;
+      card.appendChild(campaignField(smsLabel, campaign.sms.message));
+    }
+
+    if (campaign.social) {
+      card.appendChild(campaignField("Instagram caption", campaign.social.instagram_caption));
+      card.appendChild(campaignField("LinkedIn caption", campaign.social.linkedin_caption));
+      card.appendChild(campaignField("X caption", campaign.social.x_caption));
+      if (campaign.social.hashtags && campaign.social.hashtags.length > 0) {
+        card.appendChild(campaignField("Hashtags", campaign.social.hashtags.join(" ")));
+      }
+    }
   }
 
   if (warnings && warnings.length > 0) {
@@ -1947,8 +2107,11 @@ async function refineCampaign(messageIndex, instruction, clickedBtn, refineRow, 
       content: `Refine the email campaign above. ${instruction} Keep it consistent with the brand profile and everything else about the campaign that the instruction doesn't ask you to change. Return the complete revised campaign.`
     });
 
-    const includeLandingForRefine = Boolean(targetMsg.campaignData.landing_page);
-    const result = await callGroqAPI(contextMessages, "campaign", false, includeLandingForRefine);
+    const campaignOverrides = {
+      includeLandingPage: Boolean(targetMsg.campaignData.landing_page),
+      includeRepurpose: Boolean(targetMsg.campaignData.sms || targetMsg.campaignData.social)
+    };
+    const result = await callGroqAPI(contextMessages, "campaign", false, campaignOverrides);
 
     if (!result.campaign) throw new Error("No campaign data returned from the API.");
 
@@ -1974,6 +2137,107 @@ async function refineCampaign(messageIndex, instruction, clickedBtn, refineRow, 
       b.textContent = originalLabels[i];
     });
   }
+}
+
+// Renders a full sequence as one card containing a collapsible
+// section per email (native <details>, so no extra JS state needed
+// to track which are open) — each with its own deliverability
+// warnings, matching the single-campaign card's warning style.
+function addSequenceCardToDOM(sequence, warningsPerEmail, aiDisclosure) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "message assistant";
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = "✉";
+
+  const body = document.createElement("div");
+  body.className = "message-body";
+
+  const card = document.createElement("div");
+  card.className = "campaign-card sequence-card";
+
+  if (aiDisclosure) {
+    const badge = document.createElement("div");
+    badge.className = "ai-disclosure-badge";
+    badge.textContent = "AI-assisted";
+    card.appendChild(badge);
+  }
+
+  const title = document.createElement("div");
+  title.className = "sequence-title";
+  title.textContent = sequence.sequence_name || `${(sequence.emails || []).length}-email sequence`;
+  card.appendChild(title);
+
+  (sequence.emails || []).forEach((email, i) => {
+    const details = document.createElement("details");
+    details.className = "sequence-email";
+    details.open = i === 0; // first email expanded by default, rest collapsed
+
+    const summary = document.createElement("summary");
+    summary.className = "sequence-email-summary";
+    summary.innerHTML = `<span class="sequence-step-badge">Email ${email.step_number}</span> ${email.purpose || ""} <span class="sequence-delay">· ${email.send_delay || ""}</span>`;
+    details.appendChild(summary);
+
+    const emailBody = document.createElement("div");
+    emailBody.className = "sequence-email-body";
+
+    const subjectSection = document.createElement("div");
+    const subjectLabel = document.createElement("div");
+    subjectLabel.className = "campaign-label";
+    subjectLabel.textContent = "Subject lines";
+    subjectSection.appendChild(subjectLabel);
+    const subjectList = document.createElement("ul");
+    subjectList.className = "campaign-subject-list";
+    (email.subject_lines || []).forEach((s) => {
+      const li = document.createElement("li");
+      li.textContent = s;
+      subjectList.appendChild(li);
+    });
+    subjectSection.appendChild(subjectList);
+    emailBody.appendChild(subjectSection);
+
+    emailBody.appendChild(campaignField("Preheader", email.preheader));
+    emailBody.appendChild(campaignField("Body", email.body, true));
+    emailBody.appendChild(campaignField("Call to action", email.cta_text));
+
+    const emailWarnings = (warningsPerEmail && warningsPerEmail[i]) || [];
+    if (emailWarnings.length > 0) {
+      const warnSection = document.createElement("div");
+      warnSection.className = "campaign-warnings";
+      const warnLabel = document.createElement("div");
+      warnLabel.className = "campaign-warnings-label";
+      warnLabel.textContent = `⚠ ${emailWarnings.length} deliverability flag${emailWarnings.length > 1 ? "s" : ""}`;
+      warnSection.appendChild(warnLabel);
+      const warnList = document.createElement("ul");
+      emailWarnings.forEach((w) => {
+        const li = document.createElement("li");
+        li.textContent = w;
+        warnList.appendChild(li);
+      });
+      warnSection.appendChild(warnList);
+      emailBody.appendChild(warnSection);
+    }
+
+    details.appendChild(emailBody);
+    card.appendChild(details);
+  });
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "campaign-copy-btn";
+  copyBtn.textContent = "Copy full sequence";
+  copyBtn.addEventListener("click", () => {
+    navigator.clipboard.writeText(sequenceToText(sequence));
+    copyBtn.textContent = "Copied";
+    setTimeout(() => { copyBtn.textContent = "Copy full sequence"; }, 1200);
+  });
+  card.appendChild(copyBtn);
+
+  body.appendChild(card);
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(body);
+  chatLog.appendChild(wrapper);
+  chatLog.scrollTop = chatLog.scrollHeight;
 }
 
 function campaignField(label, value, isBody = false) {
