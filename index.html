@@ -27,8 +27,14 @@
 <link rel="manifest" href="/site.webmanifest">
   <!-- =================================================== -->
 
-  <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script type="module">
+    import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/build/pdf.min.mjs";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs";
+    window.pdfjsLib = pdfjsLib;
+    window.dispatchEvent(new Event("pdfjs-ready"));
+  </script>
   
 </head>
 <body>
@@ -363,7 +369,7 @@
           </button>
         </div>
 
-        <input type="file" id="fileInput" accept="image/*,.txt,.md,.csv" hidden />
+          <input type="file" id="fileInput" accept="image/*,.txt,.md,.csv,.pdf" hidden />
         <div class="input-stack">
           <div id="attachmentPreview" class="attachment-preview hidden"></div>
           <textarea
