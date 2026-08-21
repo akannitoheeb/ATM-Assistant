@@ -1067,26 +1067,91 @@ newChatBtn.addEventListener("click", () => {
 // --------------------------------------------------------------
 let pendingAttachment = null; // { kind: "image"|"text", name, data }
 
+// 8MB covers a large brand PDF or subscriber CSV without risking a
+// frozen tab on mobile Safari while it reads into memory.
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+// ~10k tokens' worth of text — keeps one attachment from silently
+// consuming a huge chunk of a message's Groq cost.
+const MAX_EXTRACTED_CHARS = 40000;
+
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files[0];
   if (!file) return;
+
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    alert(`That file is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Please use a file under 8MB.`);
+    fileInput.value = "";
+    return;
+  }
+
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
   try {
     if (file.type.startsWith("image/")) {
       const dataUrl = await readFileAsDataURL(file);
       pendingAttachment = { kind: "image", name: file.name, data: dataUrl };
+      renderAttachmentPreview();
+    } else if (isPdf) {
+      showAttachmentLoading(file.name);
+      const text = await extractPdfText(file);
+      pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
+      renderAttachmentPreview();
     } else {
       const text = await readFileAsText(file);
-      pendingAttachment = { kind: "text", name: file.name, data: text };
+      pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
+      renderAttachmentPreview();
     }
-    renderAttachmentPreview();
   } catch (error) {
     console.error("Failed to read file:", error);
-    alert("Couldn't read that file. Try an image or a plain text file.");
+    alert("Couldn't read that file. Try a PDF, image, or plain text/CSV file.");
+    pendingAttachment = null;
+    renderAttachmentPreview();
   }
 
   fileInput.value = "";
 });
+
+function truncateExtractedText(text) {
+  if (text.length <= MAX_EXTRACTED_CHARS) return text;
+  return text.slice(0, MAX_EXTRACTED_CHARS) + "\n\n[Content truncated — this file was longer than what a single message can hold.]";
+}
+
+function showAttachmentLoading(name) {
+  attachmentPreview.innerHTML = "";
+  attachmentPreview.classList.remove("hidden");
+  const chip = document.createElement("div");
+  chip.className = "attachment-chip";
+  chip.textContent = "⏳ Reading " + name + "…";
+  attachmentPreview.appendChild(chip);
+}
+
+async function ensurePdfJsReady() {
+  if (window.pdfjsLib) return;
+  await new Promise((resolve) => {
+    window.addEventListener("pdfjs-ready", resolve, { once: true });
+  });
+}
+
+async function extractPdfText(file) {
+  await ensurePdfJsReady();
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  let fullText = "";
+  const maxPages = Math.min(pdf.numPages, 30); // guards against a huge PDF hanging the page
+
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    fullText += content.items.map((item) => item.str).join(" ") + "\n\n";
+  }
+
+  if (pdf.numPages > maxPages) {
+    fullText += `[Only the first ${maxPages} of ${pdf.numPages} pages were read.]`;
+  }
+
+  return fullText.trim();
+}
 
 function readFileAsDataURL(file) {
   return new Promise((resolve, reject) => {
