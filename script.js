@@ -366,6 +366,28 @@ const memoryList = document.getElementById("memoryList");
 const memoryInput = document.getElementById("memoryInput");
 const addMemoryBtn = document.getElementById("addMemoryBtn");
 const clearMemoryBtn = document.getElementById("clearMemoryBtn");
+const settingsTabs = document.querySelectorAll(".settings-tab");
+const settingsPanels = document.querySelectorAll(".settings-panel");
+
+settingsTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    settingsTabs.forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    const target = tab.dataset.tab;
+    settingsPanels.forEach((panel) => {
+      panel.classList.toggle("hidden", panel.dataset.panel !== target);
+    });
+  });
+});
+
+function resetSettingsTabs() {
+  settingsTabs.forEach((t) => t.classList.remove("active"));
+  settingsPanels.forEach((p) => p.classList.add("hidden"));
+  const generalTab = document.querySelector('.settings-tab[data-tab="general"]');
+  const generalPanel = document.querySelector('.settings-panel[data-panel="general"]');
+  generalTab.classList.add("active");
+  generalPanel.classList.remove("hidden");
+}
 
 function renderMemoryList() {
   memoryList.innerHTML = "";
