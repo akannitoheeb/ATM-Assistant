@@ -914,6 +914,7 @@ async function saveUserData() {
 // Settings panel
 // --------------------------------------------------------------
 settingsBtn.addEventListener("click", () => {
+  resetSettingsTabs();
   applySettingsToForm();
   settingsOverlay.classList.remove("hidden");
 });
