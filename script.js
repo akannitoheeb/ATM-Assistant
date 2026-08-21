@@ -1205,7 +1205,7 @@ fileInput.addEventListener("change", async () => {
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   const isDocx = file.name.toLowerCase().endsWith(".docx");
 
-  try {
+    try {
     if (file.type.startsWith("image/")) {
       const dataUrl = await readFileAsDataURL(file);
       pendingAttachment = { kind: "image", name: file.name, data: dataUrl };
@@ -1215,24 +1215,23 @@ fileInput.addEventListener("change", async () => {
       const text = await extractPdfText(file);
       pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
       renderAttachmentPreview();
-      } else if (isDocx) {
-  showAttachmentLoading(file.name);
-  const text = await extractDocxText(file);
-  pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
-  renderAttachmentPreview();
-}
+    } else if (isDocx) {
+      showAttachmentLoading(file.name);
+      const text = await extractDocxText(file);
+      pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
+      renderAttachmentPreview();
     } else {
       const text = await readFileAsText(file);
       pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
       renderAttachmentPreview();
     }
-    } catch (error) {
+  } catch (error) {
     console.error("Failed to read file:", error);
     alert("Couldn't read that file: " + (error?.message || error));
     pendingAttachment = null;
     renderAttachmentPreview();
   }
-
+  
   fileInput.value = "";
 });
 
@@ -1270,17 +1269,18 @@ async function extractPdfText(file) {
     const content = await page.getTextContent();
     fullText += content.items.map((item) => item.str).join(" ") + "\n\n";
   }
-async function extractDocxText(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  return result.value.trim();
-}
 
   if (pdf.numPages > maxPages) {
     fullText += `[Only the first ${maxPages} of ${pdf.numPages} pages were read.]`;
   }
 
   return fullText.trim();
+}
+
+async function extractDocxText(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  return result.value.trim();
 }
 
 function readFileAsDataURL(file) {
