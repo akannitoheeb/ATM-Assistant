@@ -196,6 +196,84 @@ benefits, social proof, or FAQs), and a landing page CTA button text.
 Keep the landing page's tone and message consistent with the email itself.
 `.trim();
 
+// --------------------------------------------------------------
+// Memory extraction — a small second Groq call after each normal
+// (non-campaign) reply, deciding whether anything durable and
+// personal was said worth remembering next time. Silent no-op on
+// any failure; a missed memory is never worth blocking the reply.
+// --------------------------------------------------------------
+const MEMORY_SCHEMA = {
+  type: "json_schema",
+  json_schema: {
+    name: "memory_extraction",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        should_remember: { type: "boolean" },
+        fact: { type: "string" }
+      },
+      required: ["should_remember", "fact"],
+      additionalProperties: false
+    }
+  }
+};
+
+function buildMemoryInstruction(existingMemories) {
+  return `
+You extract durable, personal facts worth remembering about a user from a
+single chat exchange — the same idea as ChatGPT or Claude's memory feature.
+
+Set should_remember to true only for things like: their business/role,
+standing preferences, or facts they'll likely want recalled in a future,
+unrelated conversation. Do NOT remember one-off questions, small talk, or
+anything already in the existing memories list below.
+
+If should_remember is true, fact must be ONE short sentence, third person
+(e.g. "Runs a skincare brand called Glow" not "I run a skincare brand").
+
+Existing memories (never duplicate these):
+${existingMemories.length > 0 ? existingMemories.map((m) => `- ${m}`).join("\n") : "(none yet)"}
+`.trim();
+}
+
+async function extractMemory(apiKey, userText, assistantText, existingMemories) {
+  if (!userText || !assistantText) return null;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: TEXT_MODEL,
+        messages: [
+          { role: "system", content: buildMemoryInstruction(existingMemories) },
+          { role: "user", content: `User said: ${userText}\n\nAssistant replied: ${assistantText}` }
+        ],
+        response_format: MEMORY_SCHEMA,
+        reasoning_format: "hidden"
+      })
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content;
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return parsed.should_remember && parsed.fact && parsed.fact.trim()
+      ? parsed.fact.trim()
+      : null;
+  } catch (error) {
+    console.error("Memory extraction failed:", error.message);
+    return null;
+  }
+}
+
 function buildSystemInstruction(settings = {}) {
   const parts = [BASE_INSTRUCTION];
 
@@ -220,7 +298,14 @@ function buildSystemInstruction(settings = {}) {
     if (bp.voice) brandLines.push(`- Brand voice: ${bp.voice}`);
     if (bp.avoidWords) brandLines.push(`- Never use these words/phrases: ${bp.avoidWords}`);
     if (bp.sampleEmail) brandLines.push(`- Sample past email to match the style of:\n${bp.sampleEmail}`);
-    parts.push(brandLines.join("\n"));
+    
+      parts.push(brandLines.join("\n"));
+  }
+
+  if (Array.isArray(settings.memories) && settings.memories.length > 0) {
+    const memoryLines = ["Things you remember about this user from past conversations — use them naturally where relevant, don't just repeat them back:"];
+    settings.memories.forEach((m) => memoryLines.push(`- ${m.text}`));
+    parts.push(memoryLines.join("\n"));
   }
 
   return parts.join("\n\n");
@@ -524,12 +609,21 @@ module.exports = async function (req, res) {
       return res.status(200).json({ campaign, warnings });
     }
 
-    const reply = stripThinkingBlock(rawReply);
+        const reply = stripThinkingBlock(rawReply);
     const sources = searchResults
       ? searchResults.map((r) => ({ title: r.title, url: r.url }))
       : [];
 
-    return res.status(200).json({ reply, sources });
+    // Only logged-in users have persisted settings for memory to land
+    // in, so there's no point spending a second API call on guests.
+    let memory = null;
+    if (user) {
+      const latestUserText = getLatestUserText(messages);
+      const existingMemories = (settings.memories || []).map((m) => m.text);
+      memory = await extractMemory(apiKey, latestUserText, reply, existingMemories);
+    }
+
+    return res.status(200).json({ reply, sources, memory });
 
   } catch (error) {
     return res.status(500).json({ error: "Server error: " + error.message });
