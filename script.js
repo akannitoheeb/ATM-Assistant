@@ -61,6 +61,88 @@ historySearchInput.addEventListener("input", () => {
   historyFilter = historySearchInput.value.trim().toLowerCase();
   renderSidebar();
 });
+
+// --------------------------------------------------------------
+// Voice input — tap-to-record one utterance. Deliberately NOT
+// using continuous mode: Safari's continuous recognition is known
+// to be unreliable (mic never stops / no result fires), while
+// single-utterance mode works consistently across Safari, Chrome
+// and Edge.
+// --------------------------------------------------------------
+const micBtn = document.getElementById("micBtn");
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let isRecording = false;
+
+if (SpeechRecognitionCtor) {
+  recognition = new SpeechRecognitionCtor();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = "en-US";
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    userInput.value = userInput.value ? `${userInput.value} ${transcript}` : transcript;
+    autoGrow();
+  };
+
+  recognition.onerror = (event) => {
+    console.error("Speech recognition error:", event.error);
+    stopRecordingUI();
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      alert("Microphone access was blocked. Enable it under Settings > Safari > Microphone for this site.");
+    }
+  };
+
+  recognition.onend = stopRecordingUI;
+
+  micBtn.addEventListener("click", () => {
+    if (isRecording) {
+      recognition.stop();
+      return;
+    }
+    isRecording = true;
+    micBtn.classList.add("recording");
+    try {
+      recognition.start();
+    } catch (error) {
+      console.error("Could not start recognition:", error);
+      stopRecordingUI();
+    }
+  });
+} else {
+  micBtn.classList.add("hidden"); // browser has no speech recognition (e.g. desktop Firefox)
+}
+
+function stopRecordingUI() {
+  isRecording = false;
+  micBtn.classList.remove("recording");
+}
+
+// --------------------------------------------------------------
+// Voice output — reads an assistant reply aloud. Cancels any
+// currently-playing speech first, so only one reply speaks at once.
+// --------------------------------------------------------------
+function toggleSpeak(text, btn) {
+  if (!("speechSynthesis" in window)) return;
+
+  const wasThisOneSpeaking = btn.textContent === "Stop";
+  speechSynthesis.cancel();
+  document.querySelectorAll(".message-actions .action-btn").forEach((b) => {
+    if (b.textContent === "Stop") b.textContent = "Listen";
+  });
+
+  if (wasThisOneSpeaking) return; // this button's own click was the "stop" tap
+
+  const plainText = text.replace(/[*_#`]/g, ""); // strip stray markdown before speaking
+  const utterance = new SpeechSynthesisUtterance(plainText);
+  utterance.onend = () => { btn.textContent = "Listen"; };
+  utterance.onerror = () => { btn.textContent = "Listen"; };
+
+  btn.textContent = "Stop";
+  speechSynthesis.speak(utterance);
+}
+
 const sidebar = document.getElementById("sidebar");
 const sidebarOpenBtn = document.getElementById("sidebarOpenBtn");
 const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
@@ -1295,7 +1377,7 @@ function addMessageToDOM(content, kind, animate = false, sources = []) {
     const actions = document.createElement("div");
     actions.className = "message-actions";
 
-    const copyBtn = document.createElement("button");
+        const copyBtn = document.createElement("button");
     copyBtn.className = "action-btn";
     copyBtn.textContent = "Copy";
     copyBtn.addEventListener("click", () => {
@@ -1305,6 +1387,15 @@ function addMessageToDOM(content, kind, animate = false, sources = []) {
     });
 
     actions.appendChild(copyBtn);
+
+    if ("speechSynthesis" in window) {
+      const listenBtn = document.createElement("button");
+      listenBtn.className = "action-btn";
+      listenBtn.textContent = "Listen";
+      listenBtn.addEventListener("click", () => toggleSpeak(textPart, listenBtn));
+      actions.appendChild(listenBtn);
+    }
+
     body.appendChild(actions);
   }
 
