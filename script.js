@@ -1203,6 +1203,7 @@ fileInput.addEventListener("change", async () => {
   }
 
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  const isDocx = file.name.toLowerCase().endsWith(".docx");
 
   try {
     if (file.type.startsWith("image/")) {
@@ -1214,6 +1215,12 @@ fileInput.addEventListener("change", async () => {
       const text = await extractPdfText(file);
       pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
       renderAttachmentPreview();
+      } else if (isDocx) {
+  showAttachmentLoading(file.name);
+  const text = await extractDocxText(file);
+  pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
+  renderAttachmentPreview();
+}
     } else {
       const text = await readFileAsText(file);
       pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
@@ -1263,6 +1270,11 @@ async function extractPdfText(file) {
     const content = await page.getTextContent();
     fullText += content.items.map((item) => item.str).join(" ") + "\n\n";
   }
+async function extractDocxText(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  return result.value.trim();
+}
 
   if (pdf.numPages > maxPages) {
     fullText += `[Only the first ${maxPages} of ${pdf.numPages} pages were read.]`;
