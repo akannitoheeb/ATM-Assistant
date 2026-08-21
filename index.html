@@ -220,73 +220,79 @@
           <button id="closeSettingsBtn" class="modal-close" aria-label="Close">✕</button>
         </div>
 
-        <div class="modal-body">
-          <label class="field-label" for="toneSelect">Tone</label>
-          <select id="toneSelect">
-            <option value="friendly and warm">Friendly & warm</option>
-            <option value="direct and professional">Direct & professional</option>
-            <option value="playful and energetic">Playful & energetic</option>
-            <option value="premium and understated">Premium & understated</option>
-          </select>
-
-          <label class="checkbox-row">
-            <input type="checkbox" id="nigeriaToggle" checked />
-            <span>Emphasize Nigerian market context in marketing answers</span>
-          </label>
-
-         <label class="field-label" for="customInstruction">Extra instructions (optional)</label>
-          <textarea
-            id="customInstruction"
-            rows="3"
-            placeholder="e.g. Keep replies short. Always suggest 3 options, not 5."
-          ></textarea>
-
-          <div class="settings-divider">
-            <span id="brandProfileLabel">Brand Profile</span>
-          </div>
-          <p class="settings-hint">Used to tailor campaigns and answers to your business specifically.</p>
-
-          <label class="field-label" for="brandName">Business / brand name</label>
-          <input type="text" id="brandName" placeholder="e.g. ATM Assistant" />
-
-          <label class="field-label" for="brandIndustry">Industry</label>
-          <input type="text" id="brandIndustry" placeholder="e.g. fashion, SaaS, coaching" />
-
-          <label class="field-label" for="brandAudience">Target audience</label>
-          <textarea
-            id="brandAudience"
-            rows="2"
-            placeholder="e.g. Young professional women in Lagos, budget-conscious but style-focused"
-          ></textarea>
-
-          <label class="field-label" for="brandVoice">Brand voice</label>
-          <input type="text" id="brandVoice" placeholder="e.g. warm, confident, a little playful" />
-
-          <label class="field-label" for="brandAvoidWords">Words/phrases to avoid</label>
-          <input type="text" id="brandAvoidWords" placeholder="e.g. cheap, discount, hurry" />
-
-                   <label class="field-label" for="brandSampleEmail">Sample past email (optional)</label>
-          <textarea
-            id="brandSampleEmail"
-            rows="3"
-            placeholder="Paste a past email so the AI can match your style"
-          ></textarea>
-
-          <div class="settings-divider">
-            <span>Memory</span>
-          </div>
-          <p class="settings-hint">Facts ATM Assistant has picked up about you — used in every conversation, across all your projects.</p>
-
-          <div id="memoryList" class="memory-list"></div>
-
-          <div class="memory-add-row">
-            <input type="text" id="memoryInput" placeholder="Add something for it to remember…" />
-            <button type="button" id="addMemoryBtn" class="memory-add-btn">Add</button>
+                <div class="modal-body">
+          <div class="settings-tabs">
+            <button type="button" class="settings-tab active" data-tab="general">General</button>
+            <button type="button" class="settings-tab" data-tab="brand">Brand Profile</button>
+            <button type="button" class="settings-tab" data-tab="memory">Memory</button>
           </div>
 
-          <button type="button" id="clearMemoryBtn" class="memory-clear-btn">Clear all memories</button>
+          <div class="settings-panel" data-panel="general">
+            <label class="field-label" for="toneSelect">Tone</label>
+            <select id="toneSelect">
+              <option value="friendly and warm">Friendly & warm</option>
+              <option value="direct and professional">Direct & professional</option>
+              <option value="playful and energetic">Playful & energetic</option>
+              <option value="premium and understated">Premium & understated</option>
+            </select>
+
+            <label class="checkbox-row">
+              <input type="checkbox" id="nigeriaToggle" checked />
+              <span>Emphasize Nigerian market context in marketing answers</span>
+            </label>
+
+            <label class="field-label" for="customInstruction">Extra instructions (optional)</label>
+            <textarea
+              id="customInstruction"
+              rows="3"
+              placeholder="e.g. Keep replies short. Always suggest 3 options, not 5."
+            ></textarea>
+          </div>
+
+          <div class="settings-panel hidden" data-panel="brand">
+            <p class="settings-hint" id="brandProfileLabel">Used to tailor campaigns and answers to your business specifically.</p>
+
+            <label class="field-label" for="brandName">Business / brand name</label>
+            <input type="text" id="brandName" placeholder="e.g. ATM Assistant" />
+
+            <label class="field-label" for="brandIndustry">Industry</label>
+            <input type="text" id="brandIndustry" placeholder="e.g. fashion, SaaS, coaching" />
+
+            <label class="field-label" for="brandAudience">Target audience</label>
+            <textarea
+              id="brandAudience"
+              rows="2"
+              placeholder="e.g. Young professional women in Lagos, budget-conscious but style-focused"
+            ></textarea>
+
+            <label class="field-label" for="brandVoice">Brand voice</label>
+            <input type="text" id="brandVoice" placeholder="e.g. warm, confident, a little playful" />
+
+            <label class="field-label" for="brandAvoidWords">Words/phrases to avoid</label>
+            <input type="text" id="brandAvoidWords" placeholder="e.g. cheap, discount, hurry" />
+
+            <label class="field-label" for="brandSampleEmail">Sample past email (optional)</label>
+            <textarea
+              id="brandSampleEmail"
+              rows="3"
+              placeholder="Paste a past email so the AI can match your style"
+            ></textarea>
+          </div>
+
+          <div class="settings-panel hidden" data-panel="memory">
+            <p class="settings-hint">Facts ATM Assistant has picked up about you — used in every conversation, across all your projects.</p>
+
+            <div id="memoryList" class="memory-list"></div>
+
+            <div class="memory-add-row">
+              <input type="text" id="memoryInput" placeholder="Add something for it to remember…" />
+              <button type="button" id="addMemoryBtn" class="memory-add-btn">Add</button>
+            </div>
+
+            <button type="button" id="clearMemoryBtn" class="memory-clear-btn">Clear all memories</button>
+          </div>
         </div>
-
+        
         <div class="modal-footer">
           <button id="saveSettingsBtn" class="save-btn">Save</button>
         </div>
