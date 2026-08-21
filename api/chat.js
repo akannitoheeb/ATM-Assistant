@@ -297,6 +297,15 @@ function buildSystemInstruction(settings = {}) {
     parts.push(`Default tone for your replies: ${settings.tone}.`);
   }
 
+  const regionCompliance = {
+    us: "The recipients are primarily in the US. When writing campaigns, keep CAN-SPAM in mind: include a clear way to unsubscribe and don't disguise the sender.",
+    eu: "The recipients are primarily in the EU. When writing campaigns, keep GDPR and the ePrivacy Directive in mind: only write as if the recipient has given consent to be emailed, and include a clear way to unsubscribe.",
+    ca: "The recipients are primarily in Canada. When writing campaigns, keep CASL in mind: only write as if the recipient has given express or implied consent, identify the sending organization, and include a clear way to unsubscribe."
+  };
+  if (settings.region && regionCompliance[settings.region]) {
+    parts.push(regionCompliance[settings.region]);
+  }
+
   if (settings.emphasizeNigeria) {
     parts.push("When discussing marketing, factor in an understanding of the Nigerian small-business market specifically.");
   }
@@ -342,11 +351,27 @@ const SPAM_TRIGGER_WORDS = [
   "as seen on", "no credit check", "call now", "order now", "once in a lifetime"
 ];
 
-function checkDeliverability(campaign) {
+const REGION_LABELS = {
+  us: "CAN-SPAM (US)",
+  eu: "GDPR / ePrivacy Directive (EU)",
+  ca: "CASL (Canada)"
+};
+
+// Very rough heuristic for "does this look like it has a postal address
+// in it" — a digit followed by a street-ish word. Good enough to flag
+// campaigns that clearly have no address at all, which is the common
+// case; it's not meant to validate a real address is correctly formed.
+const ADDRESS_LIKE_PATTERN = /\d{1,6}\s+[a-z0-9.,\s]*\b(street|st\.|avenue|ave\.?|road|rd\.?|blvd|boulevard|drive|dr\.?|lane|ln\.?|suite|ste\.?|p\.?o\.?\s*box)\b/i;
+
+const CONSENT_LANGUAGE_PATTERN = /\b(consent|subscribed|opted[\s-]?in|signed up|you asked to hear from us|joined our list)\b/i;
+
+function checkDeliverability(campaign, region = "us") {
   const warnings = [];
   const body = (campaign.body || "").toLowerCase();
+  const rawBody = campaign.body || "";
   const subjects = campaign.subject_lines || [];
 
+  // ---- Region-agnostic checks — apply no matter who the audience is ----
   const foundSpamWords = SPAM_TRIGGER_WORDS.filter(
     (word) => body.includes(word) || subjects.some((s) => s.toLowerCase().includes(word))
   );
@@ -366,13 +391,36 @@ function checkDeliverability(campaign) {
     }
   });
 
-  if (!body.includes("unsubscribe")) {
-    warnings.push("No unsubscribe language found in the body — required by law in most regions.");
-  }
-
   const exclaimCount = (body.match(/!/g) || []).length;
   if (exclaimCount > 3) {
     warnings.push(`Body uses ${exclaimCount} exclamation marks — can trigger spam filters.`);
+  }
+
+  if (!body.includes("unsubscribe")) {
+    warnings.push("No unsubscribe language found in the body — required under CAN-SPAM, CASL, and GDPR/ePrivacy alike.");
+  }
+
+  // ---- Region-specific checks ----
+  const regionLabel = REGION_LABELS[region] || REGION_LABELS.us;
+  const hasAddress = ADDRESS_LIKE_PATTERN.test(rawBody);
+  const hasConsentLanguage = CONSENT_LANGUAGE_PATTERN.test(rawBody);
+
+  if (region === "eu") {
+    if (!hasConsentLanguage) {
+      warnings.push(`No reference to consent/opt-in — ${regionLabel} generally requires a documented lawful basis (typically consent) for marketing email. Consider referencing how the recipient opted in.`);
+    }
+  } else if (region === "ca") {
+    if (!hasAddress) {
+      warnings.push(`No physical mailing address detected — ${regionLabel} requires your organization's identification info (name + mailing address) in every commercial message.`);
+    }
+    if (!hasConsentLanguage) {
+      warnings.push(`No reference to consent/opt-in — ${regionLabel} requires proof of express or implied consent; consider referencing how the recipient opted in.`);
+    }
+  } else {
+    // Default to US / CAN-SPAM rules.
+    if (!hasAddress) {
+      warnings.push(`No physical mailing address detected — ${regionLabel} requires a valid postal address in every commercial email.`);
+    }
   }
 
   return warnings;
@@ -626,7 +674,7 @@ module.exports = async function (req, res) {
 
         if (mode === "campaign") {
       const campaign = JSON.parse(rawReply);
-      const warnings = checkDeliverability(campaign);
+      const warnings = checkDeliverability(campaign, settings?.region);
 
       if (settings.aiDisclosure) {
         campaign.body = appendDisclosure(campaign.body);
