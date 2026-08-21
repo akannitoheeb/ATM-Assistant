@@ -1101,9 +1101,9 @@ fileInput.addEventListener("change", async () => {
       pendingAttachment = { kind: "text", name: file.name, data: truncateExtractedText(text) };
       renderAttachmentPreview();
     }
-  } catch (error) {
+    } catch (error) {
     console.error("Failed to read file:", error);
-    alert("Couldn't read that file. Try a PDF, image, or plain text/CSV file.");
+    alert("Couldn't read that file: " + (error?.message || error));
     pendingAttachment = null;
     renderAttachmentPreview();
   }
