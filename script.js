@@ -356,6 +356,109 @@ function resetCampaignMode() {
   renderToolsPopupState();
 }
 
+// --------------------------------------------------------------
+// Guided onboarding — a 3-step wizard that pre-fills the Brand
+// Profile on a brand-new account's first login. Skippable at any
+// step. Writes straight into settings.brandProfile using the same
+// save path as the Settings modal, so nothing downstream needs to
+// know the data came from here instead of there.
+// --------------------------------------------------------------
+const onboardingOverlay = document.getElementById("onboardingOverlay");
+const skipOnboardingBtn = document.getElementById("skipOnboardingBtn");
+const onboardingBackBtn = document.getElementById("onboardingBackBtn");
+const onboardingNextBtn = document.getElementById("onboardingNextBtn");
+const onboardingDots = document.querySelectorAll(".onboarding-dot");
+const onboardingSteps = document.querySelectorAll(".onboarding-step");
+
+const obBrandName = document.getElementById("obBrandName");
+const obBrandIndustry = document.getElementById("obBrandIndustry");
+const obBrandAudience = document.getElementById("obBrandAudience");
+const obBrandVoice = document.getElementById("obBrandVoice");
+const obBrandAvoidWords = document.getElementById("obBrandAvoidWords");
+const obBrandSampleEmail = document.getElementById("obBrandSampleEmail");
+
+const ONBOARDING_TOTAL_STEPS = onboardingSteps.length;
+let onboardingStep = 1;
+
+function shouldShowOnboarding() {
+  if (settings.onboarded) return false;
+  const bp = settings.brandProfile || emptyBrandProfile();
+  // Only trigger for a genuinely empty profile — an account that
+  // already has brand info (e.g. restored from an older save, or
+  // filled in manually before this feature shipped) shouldn't be
+  // interrupted with a wizard asking for what it already has.
+  return !(bp.name || bp.industry || bp.audience || bp.voice || bp.avoidWords || bp.sampleEmail);
+}
+
+function openOnboarding() {
+  onboardingStep = 1;
+  obBrandName.value = "";
+  obBrandIndustry.value = "";
+  obBrandAudience.value = "";
+  obBrandVoice.value = "";
+  obBrandAvoidWords.value = "";
+  obBrandSampleEmail.value = "";
+  renderOnboardingStep();
+  onboardingOverlay.classList.remove("hidden");
+  obBrandName.focus();
+}
+
+function closeOnboarding() {
+  onboardingOverlay.classList.add("hidden");
+}
+
+function renderOnboardingStep() {
+  onboardingSteps.forEach((stepEl) => {
+    stepEl.classList.toggle("hidden", Number(stepEl.dataset.step) !== onboardingStep);
+  });
+  onboardingDots.forEach((dot) => {
+    const stepNum = Number(dot.dataset.step);
+    dot.classList.toggle("active", stepNum === onboardingStep);
+    dot.classList.toggle("done", stepNum < onboardingStep);
+  });
+  onboardingBackBtn.classList.toggle("hidden", onboardingStep === 1);
+  onboardingNextBtn.textContent = onboardingStep === ONBOARDING_TOTAL_STEPS ? "Finish" : "Continue";
+}
+
+function finishOnboarding() {
+  settings.brandProfile = {
+    name: obBrandName.value.trim(),
+    industry: obBrandIndustry.value.trim(),
+    audience: obBrandAudience.value.trim(),
+    voice: obBrandVoice.value.trim(),
+    avoidWords: obBrandAvoidWords.value.trim(),
+    sampleEmail: obBrandSampleEmail.value.trim()
+  };
+  settings.onboarded = true;
+  saveUserData();
+  applySettingsToForm(); // keep the Settings modal's Brand tab in sync
+  closeOnboarding();
+}
+
+function skipOnboarding() {
+  settings.onboarded = true;
+  saveUserData();
+  closeOnboarding();
+}
+
+onboardingNextBtn.addEventListener("click", () => {
+  if (onboardingStep < ONBOARDING_TOTAL_STEPS) {
+    onboardingStep++;
+    renderOnboardingStep();
+  } else {
+    finishOnboarding();
+  }
+});
+
+onboardingBackBtn.addEventListener("click", () => {
+  if (onboardingStep > 1) {
+    onboardingStep--;
+    renderOnboardingStep();
+  }
+});
+
+skipOnboardingBtn.addEventListener("click", skipOnboarding);
+
 const settingsOverlay = document.getElementById("settingsOverlay");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
 const saveSettingsBtn = document.getElementById("saveSettingsBtn");
@@ -474,7 +577,8 @@ function defaultSettings() {
     },
     projects: [],
     memories: [],
-    aiDisclosure: true
+    aiDisclosure: true,
+    onboarded: false
   };
 }
 
@@ -745,6 +849,10 @@ async function onLogin(user) {
   activeId = null;
   renderSidebar();
   renderActiveChat();
+
+  if (shouldShowOnboarding()) {
+    openOnboarding();
+  }
 }
 
 // --------------------------------------------------------------
@@ -837,6 +945,11 @@ async function loadUserData() {
     settings.brandProfile = settings.brandProfile || emptyBrandProfile();
     settings.memories = settings.memories || [];
     settings.aiDisclosure = settings.aiDisclosure === undefined ? true : settings.aiDisclosure;
+    // Older accounts predate this flag entirely. shouldShowOnboarding()
+    // also checks whether the brand profile is actually empty, so this
+    // default alone won't re-trigger the wizard for anyone who already
+    // has brand info saved — only for genuinely blank, pre-feature profiles.
+    settings.onboarded = settings.onboarded === undefined ? false : settings.onboarded;
   } catch (error) {
     console.error("Failed to load data:", error);
     sessions = [];
@@ -1336,11 +1449,12 @@ async function handleSend(event) {
 // API call
 // --------------------------------------------------------------
 
-  async function callGroqAPI(messages, mode, useWebSearch) {
+  async function callGroqAPI(messages, mode, useWebSearch, includeLandingPageOverride) {
   const authHeaders = await getAuthHeaders();
 
   const cleanMessages = messages.map((msg) => ({ role: msg.role, content: msg.content }));
   const settingsForRequest = { ...settings, brandProfile: getActiveBrandProfile() };
+  const landingFlag = includeLandingPageOverride !== undefined ? includeLandingPageOverride : includeLandingPage;
 
   const response = await fetch(CHAT_API_URL, {
     method: "POST",
@@ -1349,7 +1463,7 @@ async function handleSend(event) {
       messages: cleanMessages,
       settings: settingsForRequest,
       mode,
-      includeLandingPage: mode === "campaign" ? includeLandingPage : undefined,
+      includeLandingPage: mode === "campaign" ? landingFlag : undefined,
       webSearch: mode === "campaign" ? undefined : Boolean(useWebSearch)
     })
   });
@@ -1485,7 +1599,8 @@ function renderActiveChat(options = {}) {
 
   session.messages.forEach((msg, index) => {
     if (msg.kind === "campaign") {
-      addCampaignCardToDOM(msg.campaignData, msg.warnings, msg.aiDisclosure);
+      const isLastCampaign = index === session.messages.length - 1;
+      addCampaignCardToDOM(msg.campaignData, msg.warnings, msg.aiDisclosure, index, isLastCampaign);
       return;
     }
     const role = msg.role === "user" ? "user" : "assistant";
@@ -1627,7 +1742,7 @@ function campaignToText(campaign) {
   return parts.join("\n");
 }
 
-function addCampaignCardToDOM(campaign, warnings, aiDisclosure) {
+function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, isLast) {
   const wrapper = document.createElement("div");
   wrapper.className = "message assistant";
 
@@ -1717,11 +1832,109 @@ card.appendChild(campaignField("Call to action", campaign.cta_text));
   });
   card.appendChild(copyBtn);
 
+  // --------------------------------------------------------------
+  // In-place refinement — only on the most recent campaign card, so
+  // there's never ambiguity about which version of the campaign is
+  // "current." Clicking a button re-generates the campaign in place
+  // (same card, same position in the chat) rather than appending a
+  // new one below it.
+  // --------------------------------------------------------------
+  if (isLast && typeof messageIndex === "number") {
+    const refineRow = document.createElement("div");
+    refineRow.className = "campaign-refine-row";
+
+    const refineError = document.createElement("div");
+    refineError.className = "campaign-refine-error hidden";
+
+    const refineOptions = [
+      { label: "Make it shorter", instruction: "Make it noticeably shorter and tighter — cut anything that isn't pulling its weight, while keeping the core message and CTA intact." },
+      { label: "Make it punchier", instruction: "Make it punchier and more energetic — sharper hooks, more active language, stronger urgency in the CTA — without resorting to spammy phrasing." }
+    ];
+
+    refineOptions.forEach(({ label, instruction }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "campaign-refine-btn";
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        refineCampaign(messageIndex, instruction, btn, refineRow, refineError);
+      });
+      refineRow.appendChild(btn);
+    });
+
+    card.appendChild(refineRow);
+    card.appendChild(refineError);
+  }
+
   body.appendChild(card);
   wrapper.appendChild(avatar);
   wrapper.appendChild(body);
   chatLog.appendChild(wrapper);
   chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// --------------------------------------------------------------
+// Re-generates an existing campaign card in place. Sends the prior
+// conversation up to and including the original campaign, plus a
+// one-off refine instruction, back through the same structured
+// campaign endpoint — so it's the exact same JSON shape and
+// deliverability check as a fresh campaign, just steered by the
+// refine instruction instead of the user's original brief.
+//
+// The refine instruction itself is NOT saved into session.messages
+// — only the updated campaign fields on the existing message are.
+// That's what keeps this "in place" rather than adding a new user
+// turn + a new card underneath.
+// --------------------------------------------------------------
+async function refineCampaign(messageIndex, instruction, clickedBtn, refineRow, refineError) {
+  const session = getActiveSession();
+  const targetMsg = session?.messages[messageIndex];
+  if (!targetMsg || !targetMsg.campaignData) return;
+
+  refineError.classList.add("hidden");
+
+  const buttons = Array.from(refineRow.querySelectorAll(".campaign-refine-btn"));
+  const originalLabels = buttons.map((b) => b.textContent);
+  buttons.forEach((b) => { b.disabled = true; });
+  clickedBtn.textContent = "Refining…";
+
+  try {
+    const contextMessages = session.messages
+      .slice(0, messageIndex + 1)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    contextMessages.push({
+      role: "user",
+      content: `Refine the email campaign above. ${instruction} Keep it consistent with the brand profile and everything else about the campaign that the instruction doesn't ask you to change. Return the complete revised campaign.`
+    });
+
+    const includeLandingForRefine = Boolean(targetMsg.campaignData.landing_page);
+    const result = await callGroqAPI(contextMessages, "campaign", false, includeLandingForRefine);
+
+    if (!result.campaign) throw new Error("No campaign data returned from the API.");
+
+    targetMsg.content = campaignToText(result.campaign);
+    targetMsg.campaignData = result.campaign;
+    targetMsg.warnings = result.warnings;
+    targetMsg.aiDisclosure = result.aiDisclosure;
+
+    saveUserData();
+    renderActiveChat();
+  } catch (error) {
+    console.error(error);
+
+    if (error.code === "GUEST_LIMIT") {
+      openAuthModal();
+    } else {
+      refineError.textContent = "⚠ " + error.message;
+      refineError.classList.remove("hidden");
+    }
+
+    buttons.forEach((b, i) => {
+      b.disabled = false;
+      b.textContent = originalLabels[i];
+    });
+  }
 }
 
 function campaignField(label, value, isBody = false) {
