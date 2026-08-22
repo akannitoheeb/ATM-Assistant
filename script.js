@@ -1345,8 +1345,18 @@ function showAttachmentLoading(name) {
 
 async function ensurePdfJsReady() {
   if (window.pdfjsLib) return;
-  await new Promise((resolve) => {
-    window.addEventListener("pdfjs-ready", resolve, { once: true });
+
+  const PDFJS_LOAD_TIMEOUT_MS = 10000; // don't hang forever on a slow/failed CDN load
+
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("PDF reader took too long to load — check your connection and try again."));
+    }, PDFJS_LOAD_TIMEOUT_MS);
+
+    window.addEventListener("pdfjs-ready", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
   });
 }
 
