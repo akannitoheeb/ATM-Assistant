@@ -1198,6 +1198,13 @@ body {
   margin: 0;
 }
 
+.greeting-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 30px;
+  margin: 0 0 8px 0;
+}
+
 .typing-indicator {
   display: flex;
   align-items: center;
@@ -1800,6 +1807,73 @@ body {
   border-top: 1px solid var(--border);
   padding-top: 12px;
   margin-top: 2px;
+}
+
+/* ===================== SEO intro section ===================== */
+.seo-intro {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 20px 80px 20px;
+  color: var(--text);
+}
+
+.seo-banner {
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  display: block;
+  margin: 0 0 28px 0;
+}
+
+.seo-intro h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  margin: 0 0 14px 0;
+  color: var(--text);
+}
+
+.seo-intro h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 19px;
+  margin: 32px 0 10px 0;
+  color: var(--text);
+}
+
+.seo-lead {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
+.seo-intro p {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
+.seo-intro a {
+  color: var(--gold);
+  text-decoration: underline;
+}
+
+.seo-feature-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seo-feature-list li {
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.seo-feature-list strong {
+  color: var(--text);
 }
 
 /* ===================== Sequence card ===================== */
