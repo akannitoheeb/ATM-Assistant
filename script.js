@@ -245,9 +245,15 @@ function switchProject(projectId) {
   renderActiveChat();
 }
 
-newProjectBtn.addEventListener("click", () => {
+ newProjectBtn.addEventListener("click", () => {
+  if (!isActivePro) {
+    closeProjectSwitcher();
+    upgradeOverlay.classList.remove("hidden");
+    return;
+  }
+
   const name = prompt("Name this brand/project (e.g. a client's business name):");
-  if (!name || !name.trim()) return;
+   if (!name || !name.trim()) return;
 
   const project = { id: Date.now().toString(), name: name.trim(), brandProfile: emptyBrandProfile() };
   settings.projects = settings.projects || [];
@@ -365,17 +371,32 @@ toolsCampaignItem.addEventListener("click", () => {
 
 toolsLandingItem.addEventListener("click", () => {
   if (!campaignMode) return;
+  if (!isActivePro) {
+    closeToolsPopup();
+    upgradeOverlay.classList.remove("hidden");
+    return;
+  }
   includeLandingPage = !includeLandingPage;
   renderToolsPopupState();
 });
 
 toolsRepurposeItem.addEventListener("click", () => {
   if (!campaignMode) return;
+  if (!isActivePro) {
+    closeToolsPopup();
+    upgradeOverlay.classList.remove("hidden");
+    return;
+  }
   includeRepurpose = !includeRepurpose;
   renderToolsPopupState();
 });
 
 toolsSequenceItem.addEventListener("click", () => {
+  if (!isActivePro) {
+    closeToolsPopup();
+    upgradeOverlay.classList.remove("hidden");
+    return;
+  }
   sequenceMode = !sequenceMode;
   if (sequenceMode) {
     // Same mutual exclusion in the other direction.
@@ -1522,22 +1543,29 @@ async function handleSend(event) {
         } else {
       session.messages.push({ role: "assistant", content: result.reply, sources: result.sources });
 
-      if (result.memory) {
+            if (result.memory) {
         settings.memories = settings.memories || [];
-        settings.memories.push({ id: Date.now().toString(), text: result.memory, createdAt: new Date().toISOString() });
+        const FREE_MEMORY_CAP = 10;
+        if (isActivePro || settings.memories.length < FREE_MEMORY_CAP) {
+          settings.memories.push({ id: Date.now().toString(), text: result.memory, createdAt: new Date().toISOString() });
+        }
       }
 
       saveUserData();
       renderActiveChat({ typeLast: true });
     }
     
-  } catch (error) {
+    } catch (error) {
     console.error(error);
 
     if (error.code === "GUEST_LIMIT") {
       session.messages.pop();
       renderActiveChat();
       openAuthModal();
+    } else if (error.code === "PRO_REQUIRED") {
+      session.messages.pop();
+      renderActiveChat();
+      upgradeOverlay.classList.remove("hidden");
     } else {
       session.messages.push({ role: "assistant", content: "⚠️ " + error.message });
       renderActiveChat();
@@ -1586,7 +1614,7 @@ async function handleSend(event) {
 
   const data = await response.json();
 
-  if (!response.ok) {
+    if (!response.ok) {
     const err = new Error(data.error || `Request failed with status ${response.status}`);
     if (data.code) err.code = data.code;
     throw err;
