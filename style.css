@@ -1584,6 +1584,41 @@ body {
   margin: 4px 2px;
 }
 
+/* Length stepper shown under "Sequence mode" once it's active — three
+   equal-width pill buttons, same tap-target sizing philosophy as the
+   rest of the popup. Lives inside .tools-popup, so it inherits the
+   same width and gets hidden/shown via the shared .hidden utility. */
+.sequence-length-row {
+  display: flex;
+  gap: 4px;
+  padding: 2px 10px 8px 10px;
+}
+
+.sequence-length-btn {
+  flex: 1;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  border-radius: 6px;
+  padding: 7px 4px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.sequence-length-btn:hover {
+  border-color: var(--gold);
+  color: var(--text);
+}
+
+.sequence-length-btn.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--navy-deep, #16202E);
+}
+
 .campaign-card {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -1733,6 +1768,87 @@ body {
   border-top: 1px solid var(--border);
   padding-top: 12px;
   margin-top: 2px;
+}
+
+/* ===================== Sequence card ===================== */
+/* Same outer shell as .campaign-card (reused, not duplicated) — this
+   just adds the per-email collapsible sections on top. */
+.sequence-card {
+  max-width: 520px;
+}
+
+.sequence-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--text);
+}
+
+.sequence-email {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.sequence-email + .sequence-email {
+  margin-top: -2px; /* the gap: 14px on .campaign-card already spaces these; trims the double-gap look */
+}
+
+.sequence-email-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 11px 14px;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--text);
+  list-style: none; /* hides the default marker so the badge reads first */
+  background: var(--bg-main);
+  transition: background 0.15s ease;
+}
+
+.sequence-email-summary::-webkit-details-marker {
+  display: none;
+}
+
+.sequence-email-summary::before {
+  content: "▸";
+  color: var(--text-soft);
+  font-size: 11px;
+  margin-right: 2px;
+  transition: transform 0.15s ease;
+}
+
+.sequence-email[open] .sequence-email-summary::before {
+  transform: rotate(90deg);
+}
+
+.sequence-email-summary:hover {
+  background: var(--bg-panel);
+}
+
+.sequence-step-badge {
+  flex-shrink: 0;
+  background: rgba(201, 150, 46, 0.12);
+  color: var(--gold);
+  border: 1px solid rgba(201, 150, 46, 0.35);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sequence-delay {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.sequence-email-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--border);
 }
 
 .input-stack {
