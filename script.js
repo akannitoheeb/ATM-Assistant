@@ -245,7 +245,7 @@ function switchProject(projectId) {
   renderActiveChat();
 }
 
- newProjectBtn.addEventListener("click", () => {
+newProjectBtn.addEventListener("click", () => {
   if (!isActivePro) {
     closeProjectSwitcher();
     upgradeOverlay.classList.remove("hidden");
@@ -1055,7 +1055,7 @@ async function loadUserData() {
 // (the one flutterwave-webhook.js writes to after a successful
 // payment) and updates the sidebar button + upgrade modal to match.
 // --------------------------------------------------------------
-async functionasync function checkSubscriptionStatus() {
+async function checkSubscriptionStatus() {
   try {
     const { data: { user } } = await supabaseClient.auth.getUser();
     const { data: sub, error } = await supabaseClient
@@ -1548,7 +1548,7 @@ async function handleSend(event) {
 
       saveUserData();
       renderActiveChat();
-        } else        } else {
+       } else {
       session.messages.push({ role: "assistant", content: result.reply, sources: result.sources });
 
       if (result.memory) {
@@ -1564,7 +1564,6 @@ async function handleSend(event) {
     }
     
     } catch (error) {
-    console  } catch (error) {
     console.error(error);
 
     if (error.code === "GUEST_LIMIT") {
@@ -1584,7 +1583,7 @@ async function handleSend(event) {
     resetCampaignMode();
   }
 }
-
+o
 // --------------------------------------------------------------
 // API call
 // --------------------------------------------------------------
