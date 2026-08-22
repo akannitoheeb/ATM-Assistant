@@ -27,7 +27,7 @@
 <link rel="manifest" href="/site.webmanifest">
   <!-- =================================================== -->
 
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=2" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
   
@@ -432,32 +432,32 @@
             </span>
             <span class="tools-popup-check">✓</span>
           </button>
-          
-      <button type="button" id="toolsRepurposeItem" class="tools-popup-item hidden" aria-pressed="false">
-  <span class="popup-icon">🔁</span>
-  <span class="tools-popup-item-text">
-    Repurpose for SMS/social
-    <span class="tools-popup-item-hint">Adds SMS + Instagram/LinkedIn/X captions</span>
-  </span>
-  <span class="tools-popup-check">✓</span>
-</button>
 
-<div class="tools-popup-divider"></div>
+          <button type="button" id="toolsRepurposeItem" class="tools-popup-item hidden" aria-pressed="false">
+            <span class="popup-icon">🔁</span>
+            <span class="tools-popup-item-text">
+              Repurpose for SMS/social
+              <span class="tools-popup-item-hint">Adds SMS + Instagram/LinkedIn/X captions</span>
+            </span>
+            <span class="tools-popup-check">✓</span>
+          </button>
 
-<button type="button" id="toolsSequenceItem" class="tools-popup-item" aria-pressed="false">
-  <span class="popup-icon">🔗</span>
-  <span class="tools-popup-item-text">
-    Sequence mode
-    <span class="tools-popup-item-hint">Generate a multi-email drip flow</span>
-  </span>
-  <span class="tools-popup-check">✓</span>
-</button>
+          <div class="tools-popup-divider"></div>
 
-<div id="toolsSequenceLengthRow" class="sequence-length-row hidden">
-  <button type="button" class="sequence-length-btn" data-length="3">3 emails</button>
-  <button type="button" class="sequence-length-btn" data-length="4">4 emails</button>
-  <button type="button" class="sequence-length-btn" data-length="5">5 emails</button>
-</div>
+          <button type="button" id="toolsSequenceItem" class="tools-popup-item" aria-pressed="false">
+            <span class="popup-icon">🔗</span>
+            <span class="tools-popup-item-text">
+              Sequence mode
+              <span class="tools-popup-item-hint">Generate a multi-email drip flow</span>
+            </span>
+            <span class="tools-popup-check">✓</span>
+          </button>
+
+          <div id="toolsSequenceLengthRow" class="sequence-length-row hidden">
+            <button type="button" class="sequence-length-btn" data-length="3">3 emails</button>
+            <button type="button" class="sequence-length-btn" data-length="4">4 emails</button>
+            <button type="button" class="sequence-length-btn" data-length="5">5 emails</button>
+          </div>
 
           <div class="tools-popup-divider"></div>
 
@@ -490,6 +490,6 @@
 
   </div>
 
-  <script src="script.js?v=17"></script>
+  <script src="script.js?v=18"></script>
 </body>
 </html>
