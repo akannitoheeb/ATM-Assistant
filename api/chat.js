@@ -66,6 +66,14 @@ function conversationHasImage(messages) {
   );
 }
 
+const PRO_ONLY_MODES = new Set(["sequence"]);
+
+function requiresPro(mode, includeLandingPage, includeRepurpose) {
+  if (PRO_ONLY_MODES.has(mode)) return true;
+  if (mode === "campaign" && (includeLandingPage || includeRepurpose)) return true;
+  return false;
+}
+
 function totalMessageChars(messages) {
   return messages.reduce((sum, msg) => {
     const text = Array.isArray(msg.content)
@@ -570,7 +578,7 @@ function supabaseHeaders() {
 }
 
 // Checks whether this user has an active, unexpired Pro subscription.
-async function getUserPlanLimit(userId) {
+async function getUserPlanInfo(userId) {
   const headers = supabaseHeaders();
 
   const res = await fetch(
@@ -587,7 +595,10 @@ async function getUserPlanLimit(userId) {
     sub.current_period_end &&
     new Date(sub.current_period_end) > new Date();
 
-  return isActivePro ? PRO_DAILY_LIMIT : FREE_DAILY_LIMIT;
+  return {
+    plan: isActivePro ? "pro" : "free",
+    limit: isActivePro ? PRO_DAILY_LIMIT : FREE_DAILY_LIMIT
+  };
 }
 
 async function checkAndIncrementUsage(userId, limit, weight) {
@@ -702,15 +713,25 @@ module.exports = async function (req, res) {
     webSearch
   } = req.body || {};
 
-  const requestWeight = getRequestWeight(mode, { includeLandingPage, includeRepurpose, sequenceLength });
+    const requestWeight = getRequestWeight(mode, { includeLandingPage, includeRepurpose, sequenceLength });
 
   const authHeader = req.headers.authorization;
   const user = authHeader ? await verifySupabaseToken(authHeader) : null;
+  const planInfo = user ? await getUserPlanInfo(user.id) : { plan: "free", limit: null };
+
+  // Guests are always "free" here too, so this same check covers them —
+  // no separate guest-specific gating needed.
+  if (requiresPro(mode, includeLandingPage, includeRepurpose) && planInfo.plan !== "pro") {
+    return res.status(403).json({
+      error: "This feature is available on the Pro plan.",
+      code: "PRO_REQUIRED"
+    });
+  }
 
   if (user) {
-    const limit = await getUserPlanLimit(user.id);
+    const limit = planInfo.limit;
     const usage = await checkAndIncrementUsage(user.id, limit, requestWeight);
-    if (usage.blocked) {
+      if (usage.blocked) {
       return res.status(429).json({
         error: `You've reached today's limit of ${limit} messages. Resets at midnight.${limit === FREE_DAILY_LIMIT ? " Upgrade to Pro for a higher limit." : ""}${mode === "campaign" || mode === "sequence" ? " Campaigns and sequences count as more than one message since they generate more content." : ""}`,
         code: "USER_LIMIT"
