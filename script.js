@@ -410,6 +410,10 @@ function resetCampaignMode() {
   sequenceLength = 3;
   userInput.placeholder = "Message ATM Assistant…";
   renderToolsPopupState();
+    const lockedForFree = !isActivePro;
+  [toolsSequenceItem, toolsLandingItem, toolsRepurposeItem].forEach((item) => {
+    item.classList.toggle("locked", lockedForFree);
+  });
 }
 
 // --------------------------------------------------------------
@@ -618,6 +622,7 @@ let sessions = [];
 let activeId = null;
 let settings = defaultSettings();
 let isGuest = true; // flips to false once logged in
+let isActivePro = false; // read anywhere in the UI to lock/unlock Pro-only tools
 
 function defaultSettings() {
   return {
@@ -918,6 +923,7 @@ async function onLogin(user) {
 // --------------------------------------------------------------
 function showGuestMode() {
   isGuest = true;
+  isActivePro = false;
   accountBlock.classList.add("hidden");
   guestBlock.classList.remove("hidden");
   upgradeBtn.classList.add("hidden");
@@ -1032,17 +1038,19 @@ async function checkSubscriptionStatus() {
 
     if (error) throw error;
 
-    const isActivePro =
+      isActivePro = Boolean(
       sub &&
       sub.plan === "pro" &&
       sub.status === "active" &&
       sub.current_period_end &&
-      new Date(sub.current_period_end) > new Date();
+      new Date(sub.current_period_end) > new Date()
+    );
 
     applyProStatusToUI(isActivePro);
+    renderToolsPopupState(); // refresh locks now that we know the real plan
   } catch (error) {
     console.error("Failed to check subscription status:", error);
-    // Fail safe: treat as free rather than silently claiming Pro.
+    isActivePro = false;
     applyProStatusToUI(false);
   }
 }
