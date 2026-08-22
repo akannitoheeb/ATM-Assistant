@@ -1874,7 +1874,7 @@ function addMessageToDOM(msg, kind, animate = false) {
 
 // Small "Sources" row under a web-search-backed reply — expects
 // sources as [{ title, url }], returned by the backend.
-function buildSourcesRow(sources) {
+  function buildSourcesRow(sources) {
   const row = document.createElement("div");
   row.className = "sources-row";
 
@@ -1889,7 +1889,19 @@ function buildSourcesRow(sources) {
     link.href = src.url;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = src.title || new URL(src.url).hostname;
+
+    // A malformed/relative URL from a search result shouldn't crash the
+    // whole reply — fall back to the raw URL string if it can't be parsed.
+    let displayText = src.title;
+    if (!displayText) {
+      try {
+        displayText = new URL(src.url).hostname;
+      } catch (error) {
+        displayText = src.url || "source";
+      }
+    }
+    link.textContent = displayText;
+
     row.appendChild(link);
   });
 
