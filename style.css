@@ -1578,6 +1578,22 @@ body {
   opacity: 1;
 }
 
+.tools-popup-item.locked {
+  opacity: 0.55;
+}
+
+.tools-popup-item.locked::after {
+  content: "PRO";
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 6px;
+}
+
 .tools-popup-divider {
   height: 1px;
   background: var(--border);
