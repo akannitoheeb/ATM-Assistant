@@ -253,7 +253,7 @@ function switchProject(projectId) {
   }
 
   const name = prompt("Name this brand/project (e.g. a client's business name):");
-   if (!name || !name.trim()) return;
+  if (!name || !name.trim()) return;
 
   const project = { id: Date.now().toString(), name: name.trim(), brandProfile: emptyBrandProfile() };
   settings.projects = settings.projects || [];
@@ -346,6 +346,13 @@ function renderToolsPopupState() {
   toolsWebSearchItem.setAttribute("aria-pressed", String(webSearchMode));
 
   toolsBtn.classList.toggle("has-active", campaignMode || sequenceMode || webSearchMode);
+
+  // Free plan: lock the heavier campaign add-ons and sequence mode,
+  // and show a "PRO" badge on them instead of just hiding them.
+  const lockedForFree = !isActivePro;
+  [toolsSequenceItem, toolsLandingItem, toolsRepurposeItem].forEach((item) => {
+    item.classList.toggle("locked", lockedForFree);
+  });
 }
 
 toolsAttachItem.addEventListener("click", () => {
@@ -1048,7 +1055,7 @@ async function loadUserData() {
 // (the one flutterwave-webhook.js writes to after a successful
 // payment) and updates the sidebar button + upgrade modal to match.
 // --------------------------------------------------------------
-async function checkSubscriptionStatus() {
+async functionasync function checkSubscriptionStatus() {
   try {
     const { data: { user } } = await supabaseClient.auth.getUser();
     const { data: sub, error } = await supabaseClient
@@ -1059,7 +1066,7 @@ async function checkSubscriptionStatus() {
 
     if (error) throw error;
 
-      isActivePro = Boolean(
+    isActivePro = Boolean(
       sub &&
       sub.plan === "pro" &&
       sub.status === "active" &&
@@ -1071,6 +1078,7 @@ async function checkSubscriptionStatus() {
     renderToolsPopupState(); // refresh locks now that we know the real plan
   } catch (error) {
     console.error("Failed to check subscription status:", error);
+    // Fail safe: treat as free rather than silently claiming Pro.
     isActivePro = false;
     applyProStatusToUI(false);
   }
@@ -1540,10 +1548,10 @@ async function handleSend(event) {
 
       saveUserData();
       renderActiveChat();
-        } else {
+        } else        } else {
       session.messages.push({ role: "assistant", content: result.reply, sources: result.sources });
 
-            if (result.memory) {
+      if (result.memory) {
         settings.memories = settings.memories || [];
         const FREE_MEMORY_CAP = 10;
         if (isActivePro || settings.memories.length < FREE_MEMORY_CAP) {
@@ -1556,6 +1564,7 @@ async function handleSend(event) {
     }
     
     } catch (error) {
+    console  } catch (error) {
     console.error(error);
 
     if (error.code === "GUEST_LIMIT") {
