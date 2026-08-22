@@ -60,6 +60,19 @@ function getRequestWeight(mode, weightOpts = {}) {
   return weight;
 }
 
+// --------------------------------------------------------------
+// Free vs Pro gating — sequence mode, and the landing-page/repurpose
+// campaign add-ons, are Pro-only. Everything else (single-email
+// campaigns, normal chat, web search) stays free.
+// --------------------------------------------------------------
+const PRO_ONLY_MODES = new Set(["sequence"]);
+
+function requiresPro(mode, includeLandingPage, includeRepurpose) {
+  if (PRO_ONLY_MODES.has(mode)) return true;
+  if (mode === "campaign" && (includeLandingPage || includeRepurpose)) return true;
+  return false;
+}
+
 function conversationHasImage(messages) {
   return messages.some(
     (msg) => Array.isArray(msg.content) && msg.content.some((part) => part.type === "image_url")
