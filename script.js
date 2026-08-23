@@ -1004,8 +1004,7 @@ async function onLogin(user) {
     notifyBrevoSignup(user.email, fullName);
   }
 
-  
-    await loadUserData();
+  await loadUserData();
   await checkSubscriptionStatus();
   restoreActiveState(); // resume the last chat/project instead of always starting blank
   activeProjectLabel.textContent = getActiveProjectName();
@@ -1035,7 +1034,7 @@ function showGuestMode() {
   activeProjectLabel.textContent = "General";
   applySettingsToForm();
   renderMemoryList();
-}
+} 
 
 // --------------------------------------------------------------
 // Upgrade to Pro
