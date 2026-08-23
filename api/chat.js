@@ -250,38 +250,46 @@ function buildCampaignSchema({ includeLandingPage, includeRepurpose } = {}) {
   };
 }
 
-const SEQUENCE_SCHEMA = {
-  type: "json_schema",
-  json_schema: {
-    name: "email_sequence",
-    strict: true,
-    schema: {
-      type: "object",
-      properties: {
-        sequence_name: { type: "string" },
-        emails: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              step_number: { type: "integer" },
-              send_delay: { type: "string" }, // e.g. "Immediately", "Day 2", "Day 5"
-              purpose: { type: "string" },    // e.g. "Welcome", "Social proof", "Urgency/close"
-              subject_lines: { type: "array", items: { type: "string" } },
-              preheader: { type: "string" },
-              body: { type: "string" },
-              cta_text: { type: "string" }
-            },
-            required: ["step_number", "send_delay", "purpose", "subject_lines", "preheader", "body", "cta_text"],
-            additionalProperties: false
+// Parameterized by length now, instead of one static schema — the emails
+// array gets minItems/maxItems pinned to exactly what the user asked for,
+// so the model can no longer satisfy the schema by returning fewer emails
+// than requested.
+function buildSequenceSchema(length) {
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: "email_sequence",
+      strict: true,
+      schema: {
+        type: "object",
+        properties: {
+          sequence_name: { type: "string" },
+          emails: {
+            type: "array",
+            minItems: length,
+            maxItems: length,
+            items: {
+              type: "object",
+              properties: {
+                step_number: { type: "integer" },
+                send_delay: { type: "string" }, // e.g. "Immediately", "Day 2", "Day 5"
+                purpose: { type: "string" },    // e.g. "Welcome", "Social proof", "Urgency/close"
+                subject_lines: { type: "array", items: { type: "string" } },
+                preheader: { type: "string" },
+                body: { type: "string" },
+                cta_text: { type: "string" }
+              },
+              required: ["step_number", "send_delay", "purpose", "subject_lines", "preheader", "body", "cta_text"],
+              additionalProperties: false
+            }
           }
-        }
-      },
-      required: ["sequence_name", "emails"],
-      additionalProperties: false
+        },
+        required: ["sequence_name", "emails"],
+        additionalProperties: false
+      }
     }
-  }
-};
+  };
+}
 
 const CAMPAIGN_INSTRUCTION = `
 The user wants a complete email marketing campaign. Fill subject_lines with
@@ -798,13 +806,13 @@ module.exports = async function (req, res) {
       searchResults ? buildSearchContextBlock(searchResults) : ""
     ].filter(Boolean).join("\n\n");
 
-    let responseFormat;
+        let responseFormat;
     if (mode === "campaign") {
       responseFormat = buildCampaignSchema({ includeLandingPage, includeRepurpose });
     } else if (mode === "sequence") {
-      responseFormat = SEQUENCE_SCHEMA;
+      responseFormat = buildSequenceSchema(clampedSequenceLength);
     }
-
+    
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
