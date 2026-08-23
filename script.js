@@ -1865,7 +1865,7 @@ function addMessageToDOM(msg, kind, animate = false) {
     const actions = document.createElement("div");
     actions.className = "message-actions";
 
-        const copyBtn = document.createElement("button");
+    const copyBtn = document.createElement("button");
     copyBtn.className = "action-btn";
     copyBtn.textContent = "Copy";
     copyBtn.addEventListener("click", () => {
@@ -1978,6 +1978,26 @@ function campaignToText(campaign) {
   }
 
   return parts.join("\n");
+}
+
+// Client-side file download — no backend involved. Builds a Blob from
+// plain text and triggers a normal browser download via a throwaway <a>.
+function downloadTextFile(filename, content) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Turns a subject line (or fallback) into a safe filename.
+function slugifyFilename(text, fallback) {
+  const base = (text || fallback || "download").slice(0, 40);
+  return base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || fallback;
 }
 
 // Flattens a sequence into copyable plain text — each email in full,
@@ -2105,7 +2125,7 @@ card.appendChild(campaignField("Call to action", campaign.cta_text));
     card.appendChild(okMsg);
   }
 
-  const copyBtn = document.createElement("button");
+    const copyBtn = document.createElement("button");
   
   copyBtn.className = "campaign-copy-btn";
   copyBtn.textContent = "Copy full campaign";
@@ -2116,6 +2136,15 @@ card.appendChild(campaignField("Call to action", campaign.cta_text));
     setTimeout(() => { copyBtn.textContent = "Copy full campaign"; }, 1200);
   });
   card.appendChild(copyBtn);
+
+  const downloadBtn = document.createElement("button");
+  downloadBtn.className = "campaign-copy-btn";
+  downloadBtn.textContent = "Download";
+  downloadBtn.addEventListener("click", () => {
+    const filename = slugifyFilename(campaign.subject_lines?.[0], "campaign") + ".txt";
+    downloadTextFile(filename, campaignToText(campaign));
+  });
+  card.appendChild(downloadBtn);
 
   // --------------------------------------------------------------
   // In-place refinement — only on the most recent campaign card, so
@@ -2250,9 +2279,10 @@ function addSequenceCardToDOM(sequence, warningsPerEmail, aiDisclosure) {
     card.appendChild(badge);
   }
 
+  const emailCount = (sequence.emails || []).length;
   const title = document.createElement("div");
   title.className = "sequence-title";
-  title.textContent = sequence.sequence_name || `${(sequence.emails || []).length}-email sequence`;
+  title.textContent = `${sequence.sequence_name || "Email sequence"} (${emailCount} email${emailCount === 1 ? "" : "s"})`;
   card.appendChild(title);
 
   (sequence.emails || []).forEach((email, i) => {
@@ -2318,6 +2348,15 @@ function addSequenceCardToDOM(sequence, warningsPerEmail, aiDisclosure) {
     setTimeout(() => { copyBtn.textContent = "Copy full sequence"; }, 1200);
   });
   card.appendChild(copyBtn);
+
+  const downloadBtn = document.createElement("button");
+  downloadBtn.className = "campaign-copy-btn";
+  downloadBtn.textContent = "Download";
+  downloadBtn.addEventListener("click", () => {
+    const filename = slugifyFilename(sequence.sequence_name, "sequence") + ".txt";
+    downloadTextFile(filename, sequenceToText(sequence));
+  });
+  card.appendChild(downloadBtn);
 
   body.appendChild(card);
   wrapper.appendChild(avatar);
