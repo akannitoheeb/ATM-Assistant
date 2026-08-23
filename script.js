@@ -673,6 +673,12 @@ function persistActiveState() {
 }
 
 function restoreActiveState() {
+  // Always start from a clean default. If nothing valid is found below,
+  // this is what we fall back to — never leaves a stale in-memory value
+  // in place from whatever ran before this function was called.
+  activeProjectId = null;
+  activeId = null;
+
   try {
     const raw = localStorage.getItem(LAST_ACTIVE_KEY);
     if (!raw) return;
@@ -685,8 +691,8 @@ function restoreActiveState() {
     const sessionStillExists = saved.activeId && sessions.some((s) => s.id === saved.activeId);
     activeId = sessionStillExists ? saved.activeId : null;
   } catch (error) {
-    // Corrupt or unavailable storage just falls back to the normal
-    // "new chat" default — never lets a bad value crash the app.
+    // Corrupt or unavailable storage just falls back to the defaults set
+    // above — never lets a bad value crash the app.
   }
 }
 
@@ -944,7 +950,10 @@ function notifyBrevoSignup(email, name) {
 
 logoutBtn.addEventListener("click", () => {
   closeAccountPopup();
-  try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch (error) {}
+  try {
+    localStorage.removeItem(LAST_ACTIVE_KEY);
+    localStorage.removeItem(DRAFT_KEY); // don't leak an unsent draft into the next account on this device
+  } catch (error) {}
   supabaseClient.auth.signOut();
 });
 
@@ -995,7 +1004,8 @@ async function onLogin(user) {
     notifyBrevoSignup(user.email, fullName);
   }
 
-  await loadUserData();
+  
+    await loadUserData();
   await checkSubscriptionStatus();
   restoreActiveState(); // resume the last chat/project instead of always starting blank
   activeProjectLabel.textContent = getActiveProjectName();
