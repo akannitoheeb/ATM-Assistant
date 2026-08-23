@@ -240,6 +240,7 @@ function switchProject(projectId) {
   activeProjectId = projectId;
   activeProjectLabel.textContent = getActiveProjectName();
   activeId = null;
+  persistActiveState();
   closeProjectSwitcher();
   renderSidebar();
   renderActiveChat();
@@ -273,10 +274,11 @@ function deleteProject(projectId) {
     if (s.projectId === projectId) s.projectId = null;
   });
 
-  if (activeProjectId === projectId) {
+    if (activeProjectId === projectId) {
     activeProjectId = null;
     activeProjectLabel.textContent = "General";
     activeId = null;
+    persistActiveState();
   }
 
   saveUserData();
@@ -652,6 +654,66 @@ let settings = defaultSettings();
 let isGuest = true; // flips to false once logged in
 let isActivePro = false; // read anywhere in the UI to lock/unlock Pro-only tools
 
+// --------------------------------------------------------------
+// Persistence across reloads — iOS Safari reloads background tabs from
+// scratch under memory pressure, which wipes all in-memory JS state.
+// These two small layers save just enough to localStorage that a fresh
+// reload can restore "where you were" instead of starting blank.
+// --------------------------------------------------------------
+const LAST_ACTIVE_KEY = "atm_last_active";
+const DRAFT_KEY = "atm_draft_text";
+
+function persistActiveState() {
+  try {
+    localStorage.setItem(LAST_ACTIVE_KEY, JSON.stringify({ activeId, activeProjectId }));
+  } catch (error) {
+    // Private browsing etc. can throw here — losing "resume where I left
+    // off" is fine, it should never break the app itself.
+  }
+}
+
+function restoreActiveState() {
+  try {
+    const raw = localStorage.getItem(LAST_ACTIVE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+
+    const projectStillExists = saved.activeProjectId === null ||
+      (settings.projects || []).some((p) => p.id === saved.activeProjectId);
+    activeProjectId = projectStillExists ? saved.activeProjectId : null;
+
+    const sessionStillExists = saved.activeId && sessions.some((s) => s.id === saved.activeId);
+    activeId = sessionStillExists ? saved.activeId : null;
+  } catch (error) {
+    // Corrupt or unavailable storage just falls back to the normal
+    // "new chat" default — never lets a bad value crash the app.
+  }
+}
+
+function persistDraft() {
+  try {
+    if (userInput.value) {
+      localStorage.setItem(DRAFT_KEY, userInput.value);
+    } else {
+      localStorage.removeItem(DRAFT_KEY);
+    }
+  } catch (error) {
+    // Same reasoning as above — draft recovery is a nice-to-have, not
+    // something that should ever be allowed to break typing.
+  }
+}
+
+function restoreDraft() {
+  try {
+    const saved = localStorage.getItem(DRAFT_KEY);
+    if (saved) {
+      userInput.value = saved;
+      autoGrow();
+    }
+  } catch (error) {
+    // Ignore — worst case, the draft just doesn't come back.
+  }
+}
 function defaultSettings() {
   return {
     tone: "friendly and warm",
@@ -882,6 +944,7 @@ function notifyBrevoSignup(email, name) {
 
 logoutBtn.addEventListener("click", () => {
   closeAccountPopup();
+  try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch (error) {}
   supabaseClient.auth.signOut();
 });
 
@@ -934,18 +997,16 @@ async function onLogin(user) {
 
   await loadUserData();
   await checkSubscriptionStatus();
-  activeProjectId = null;
-  activeProjectLabel.textContent = "General";
+  restoreActiveState(); // resume the last chat/project instead of always starting blank
+  activeProjectLabel.textContent = getActiveProjectName();
   applySettingsToForm();
-  activeId = null;
   renderSidebar();
   renderActiveChat();
 
   if (shouldShowOnboarding()) {
     openOnboarding();
   }
-}
-
+  
 // --------------------------------------------------------------
 // Guest state — chat stays usable, nothing persists across reloads
 // --------------------------------------------------------------
@@ -1267,6 +1328,7 @@ window.addEventListener("resize", () => {
 // --------------------------------------------------------------
 newChatBtn.addEventListener("click", () => {
   activeId = null;
+  persistActiveState();
   renderSidebar();
   renderActiveChat();
   userInput.focus();
@@ -1487,7 +1549,10 @@ userInput.addEventListener("keydown", (event) => {
   }
 });
 
-userInput.addEventListener("input", autoGrow);
+userInput.addEventListener("input", () => {
+  autoGrow();
+  persistDraft();
+});
 
 let isSending = false;
 
@@ -1511,9 +1576,10 @@ async function handleSend(event) {
     };
     sessions.unshift(newSession);
     activeId = newSession.id;
+    persistActiveState();
   }
 
-    let content = text;
+  let content = text;
   const attachmentSummary = pendingAttachments.map((a) => ({ kind: a.kind, name: a.name }));
 
   if (pendingAttachments.length > 0) {
@@ -1540,6 +1606,7 @@ async function handleSend(event) {
   renderActiveChat();
 
   userInput.value = "";
+  persistDraft(); // clears the saved draft now that it's been sent
   pendingAttachments = [];
   renderAttachmentPreview();
   autoGrow();
@@ -1701,13 +1768,14 @@ function renderSidebar() {
     // requires a tap-to-click target to match its hover target, or the
     // first tap only "hovers" and a second tap is needed to actually
     // fire the click. This is what fixes "double tap to open a chat".
-    item.addEventListener("click", () => {
+      item.addEventListener("click", () => {
       activeId = session.id;
+      persistActiveState();
       renderSidebar();
       renderActiveChat();
       if (isMobileViewport()) closeSidebar();
     });
-
+    
     const label = document.createElement("span");
     label.className = "history-item-label";
     label.textContent = session.title || "New chat";
@@ -1734,10 +1802,11 @@ function handleHistoryMenu(sessionId) {
   const newTitle = prompt("Rename this chat (leave blank to delete it):", session.title);
   if (newTitle === null) return;
 
-  if (newTitle.trim() === "") {
+    if (newTitle.trim() === "") {
     if (confirm("Delete this chat? This can't be undone.")) {
       sessions = sessions.filter(s => s.id !== sessionId);
       if (activeId === sessionId) activeId = sessions.length > 0 ? sessions[0].id : null;
+      persistActiveState();
       saveUserData();
       renderSidebar();
       renderActiveChat();
@@ -2523,3 +2592,4 @@ function getActiveSession() {
 // --------------------------------------------------------------
 renderActiveChat();
 renderToolsPopupState();
+restoreDraft();
