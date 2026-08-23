@@ -1467,6 +1467,7 @@ function addTypingIndicator() {
 // --------------------------------------------------------------
 // Sending a message
 // --------------------------------------------------------------
+chatForm.removeEventListener("submit", handleSend);
 chatForm.addEventListener("submit", handleSend);
 
 userInput.addEventListener("keydown", (event) => {
@@ -1478,11 +1479,15 @@ userInput.addEventListener("keydown", (event) => {
 
 userInput.addEventListener("input", autoGrow);
 
+let isSending = false;
+
 async function handleSend(event) {
   event.preventDefault();
+  if (isSending) return;
+  isSending = true;
 
     const text = userInput.value.trim();
-  if (!text && pendingAttachments.length === 0) return;
+  if (!text && pendingAttachments.length === 0) { isSending = false; return; }
 
   if (activeId === null) {
     const newSession = {
@@ -1588,12 +1593,14 @@ async function handleSend(event) {
       session.messages.push({ role: "assistant", content: "⚠️ " + error.message });
       renderActiveChat();
     }
-  } finally {
+    
+    } finally {
     setLoading(false);
     resetCampaignMode();
+    isSending = false;
   }
 }
-o
+
 // --------------------------------------------------------------
 // API call
 // --------------------------------------------------------------
