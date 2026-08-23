@@ -79,14 +79,6 @@ function conversationHasImage(messages) {
   );
 }
 
-const PRO_ONLY_MODES = new Set(["sequence"]);
-
-function requiresPro(mode, includeLandingPage, includeRepurpose) {
-  if (PRO_ONLY_MODES.has(mode)) return true;
-  if (mode === "campaign" && (includeLandingPage || includeRepurpose)) return true;
-  return false;
-}
-
 function totalMessageChars(messages) {
   return messages.reduce((sum, msg) => {
     const text = Array.isArray(msg.content)
