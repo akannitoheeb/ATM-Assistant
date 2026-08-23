@@ -1016,6 +1016,7 @@ async function onLogin(user) {
   if (shouldShowOnboarding()) {
     openOnboarding();
   }
+}
   
 // --------------------------------------------------------------
 // Guest state — chat stays usable, nothing persists across reloads
