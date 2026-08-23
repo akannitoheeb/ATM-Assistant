@@ -1308,21 +1308,31 @@ fileInput.addEventListener("change", async () => {
       if (file.type.startsWith("image/")) {
         const dataUrl = await readFileAsDataURL(file);
         pendingAttachments.push({ kind: "image", name: file.name, data: dataUrl });
-      } else if (isPdf) {
-        showAttachmentLoading(file.name);
-        const text = await extractPdfText(file);
-        pendingAttachments.push({ kind: "text", name: file.name, data: truncateExtractedText(text) });
-      } else if (isDocx) {
-        showAttachmentLoading(file.name);
-        const text = await extractDocxText(file);
-        pendingAttachments.push({ kind: "text", name: file.name, data: truncateExtractedText(text) });
+        renderAttachmentPreview();
+      } else if (isPdf || isDocx) {
+        // Track the loading state as a real entry in pendingAttachments
+        // (not a detached DOM node) so a re-render triggered by another
+        // attachment finishing first can't wipe it out.
+        const loadingEntry = { kind: "loading", name: file.name };
+        pendingAttachments.push(loadingEntry);
+        renderAttachmentPreview();
+
+        const text = isPdf ? await extractPdfText(file) : await extractDocxText(file);
+
+        const idx = pendingAttachments.indexOf(loadingEntry);
+        if (idx !== -1) {
+          pendingAttachments[idx] = { kind: "text", name: file.name, data: truncateExtractedText(text) };
+        }
+        renderAttachmentPreview();
       } else {
         const text = await readFileAsText(file);
         pendingAttachments.push({ kind: "text", name: file.name, data: truncateExtractedText(text) });
+        renderAttachmentPreview();
       }
-      renderAttachmentPreview();
     } catch (error) {
       console.error("Failed to read file:", error);
+      pendingAttachments = pendingAttachments.filter((a) => !(a.kind === "loading" && a.name === file.name));
+      renderAttachmentPreview();
       alert(`Couldn't read ${file.name}: ` + (error?.message || error));
     }
   }
@@ -1333,14 +1343,6 @@ fileInput.addEventListener("change", async () => {
 function truncateExtractedText(text) {
   if (text.length <= MAX_EXTRACTED_CHARS) return text;
   return text.slice(0, MAX_EXTRACTED_CHARS) + "\n\n[Content truncated — this file was longer than what a single message can hold.]";
-}
-
-function showAttachmentLoading(name) {
-  attachmentPreview.classList.remove("hidden");
-  const chip = document.createElement("div");
-  chip.className = "attachment-chip";
-  chip.textContent = "⏳ Reading " + name + "…";
-  attachmentPreview.appendChild(chip);
 }
 
 async function ensurePdfJsReady() {
@@ -1416,6 +1418,14 @@ function renderAttachmentPreview() {
   attachmentPreview.classList.remove("hidden");
 
   pendingAttachments.forEach((attachment, index) => {
+    if (attachment.kind === "loading") {
+      const chip = document.createElement("div");
+      chip.className = "attachment-chip";
+      chip.textContent = "⏳ Reading " + attachment.name + "…";
+      attachmentPreview.appendChild(chip);
+      return; // no remove button while it's still loading
+    }
+
     if (attachment.kind === "image") {
       const img = document.createElement("img");
       img.src = attachment.data;
@@ -1483,11 +1493,14 @@ let isSending = false;
 
 async function handleSend(event) {
   event.preventDefault();
-  if (isSending) return;
-  isSending = true;
+
+  if (pendingAttachments.some((a) => a.kind === "loading")) {
+    alert("Still reading an attached file — give it a second and try again.");
+    return;
+  }
 
     const text = userInput.value.trim();
-  if (!text && pendingAttachments.length === 0) { isSending = false; return; }
+  if (!text && pendingAttachments.length === 0) return;
 
   if (activeId === null) {
     const newSession = {
