@@ -206,9 +206,9 @@ function renderProjectSwitcher() {
   const generalItem = document.createElement("button");
   generalItem.type = "button";
   generalItem.className = "project-popup-item" + (activeProjectId === null ? " active" : "");
-  generalItem.textContent = "General";
+  generalItem.textContent = "Project";
   generalItem.addEventListener("click", () => switchProject(null));
-  projectListContainer.appendChild(generalItem);
+  projectListContainer.appendChild(projectItem);
 
   (settings.projects || []).forEach((project) => {
     const row = document.createElement("div");
@@ -267,7 +267,7 @@ function deleteProject(projectId) {
   const project = (settings.projects || []).find((p) => p.id === projectId);
   if (!project) return;
 
-  if (!confirm(`Delete "${project.name}"? Its chats move to General, they won't be deleted.`)) return;
+  if (!confirm(`Delete "${project.name}"? Its chats move to Project, they won't be deleted.`)) return;
 
   settings.projects = settings.projects.filter((p) => p.id !== projectId);
   sessions.forEach((s) => {
@@ -276,7 +276,7 @@ function deleteProject(projectId) {
 
     if (activeProjectId === projectId) {
     activeProjectId = null;
-    activeProjectLabel.textContent = "General";
+    activeProjectLabel.textContent = "Project";
     activeId = null;
     persistActiveState();
   }
@@ -1031,7 +1031,7 @@ function showGuestMode() {
   settings = defaultSettings();
   activeId = null;
   activeProjectId = null;
-  activeProjectLabel.textContent = "General";
+  activeProjectLabel.textContent = "Project";
   applySettingsToForm();
   renderMemoryList();
 } 
