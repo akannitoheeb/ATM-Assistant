@@ -208,7 +208,7 @@ function renderProjectSwitcher() {
   generalItem.className = "project-popup-item" + (activeProjectId === null ? " active" : "");
   generalItem.textContent = "Project";
   generalItem.addEventListener("click", () => switchProject(null));
-  projectListContainer.appendChild(projectItem);
+  projectListContainer.appendChild(generalItem);
 
   (settings.projects || []).forEach((project) => {
     const row = document.createElement("div");
@@ -757,7 +757,7 @@ function getActiveBrandProfile() {
 
 function getActiveProjectName() {
   const project = getActiveProject();
-  return project ? project.name : "General";
+  return project ? project.name : "Project";
 }
 
 function sessionMatchesActiveProject(session) {
