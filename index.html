@@ -109,46 +109,59 @@
       </nav>
 
      <div class="sidebar-bottom">
-        <button id="settingsBtn" class="settings-btn">
-          <span class="gear">⚙</span> Settings
-        </button>
 
-     <div class="footer-links-row">
-          <a href="/about.html" class="footer-link">About</a>
-          <span class="footer-link-dot">·</span>
-          <a href="/faq.html" class="footer-link">FAQ</a>
+  <!-- Shown when nobody is logged in -->
+  <div id="guestBlock" class="guest-block">
+    <button type="button" id="guestTrigger" class="account-row" aria-haspopup="true" aria-expanded="false">
+      <span class="user-avatar-wrap"><span class="popup-icon">⋯</span></span>
+      <span class="user-tag">Settings & help</span>
+    </button>
+
+    <div id="guestPopup" class="account-popup hidden">
+      <button id="guestSettingsBtn" class="account-popup-item">
+        <span class="popup-icon">⚙</span> Settings
+      </button>
+      <a href="/about.html" class="account-popup-item">
+        <span class="popup-icon">ℹ</span> About
+      </a>
+      <a href="/faq.html" class="account-popup-item">
+        <span class="popup-icon">?</span> FAQ
+      </a>
     </div>
 
-        <!-- Shown when nobody is logged in -->
-        <div id="guestBlock" class="guest-block">
-          <button id="openAuthBtn" class="signup-prompt-btn">Sign up / Log in</button>
-        </div>
+    <button id="openAuthBtn" class="signup-prompt-btn">Sign up / Log in</button>
+  </div>
 
-        <!-- Shown once logged in -->
-        <div id="accountBlock" class="account-block hidden">
-          <button type="button" id="accountTrigger" class="account-row" aria-haspopup="true" aria-expanded="false">
-            <div class="user-avatar-wrap">
-              <img id="userAvatarImg" class="user-avatar-img hidden" alt="" />
-              <span id="userAvatarInitial" class="user-avatar-initial">…</span>
-            </div>
-            <span id="userEmail" class="user-tag">…</span>
-          </button>
-
-          <div id="accountPopup" class="account-popup hidden">
-            <button id="upgradeBtn" class="account-popup-item upgrade-item hidden">
-              <span class="popup-icon">✨</span> Upgrade to Pro
-            </button>
-            <button id="popupSettingsBtn" class="account-popup-item">
-            </button>
-       
-          
-            <div class="account-popup-divider"></div>
-            <button id="logoutBtn" class="account-popup-item logout-item">
-              <span class="popup-icon">⎋</span> Log out
-            </button>
-          </div>
-        </div>
+  <!-- Shown once logged in -->
+  <div id="accountBlock" class="account-block hidden">
+    <button type="button" id="accountTrigger" class="account-row" aria-haspopup="true" aria-expanded="false">
+      <div class="user-avatar-wrap">
+        <img id="userAvatarImg" class="user-avatar-img hidden" alt="" />
+        <span id="userAvatarInitial" class="user-avatar-initial">…</span>
       </div>
+      <span id="userEmail" class="user-tag">…</span>
+    </button>
+
+    <div id="accountPopup" class="account-popup hidden">
+      <button id="upgradeBtn" class="account-popup-item upgrade-item hidden">
+        <span class="popup-icon">✨</span> Upgrade to Pro
+      </button>
+      <button id="popupSettingsBtn" class="account-popup-item">
+        <span class="popup-icon">⚙</span> Settings
+      </button>
+      <a href="/about.html" class="account-popup-item">
+        <span class="popup-icon">ℹ</span> About
+      </a>
+      <a href="/faq.html" class="account-popup-item">
+        <span class="popup-icon">?</span> FAQ
+      </a>
+      <div class="account-popup-divider"></div>
+      <button id="logoutBtn" class="account-popup-item logout-item">
+        <span class="popup-icon">⎋</span> Log out
+      </button>
+    </div>
+  </div>
+</div>
     </aside>
 
     <!-- ===================== LOGIN / SIGNUP MODAL ===================== -->
