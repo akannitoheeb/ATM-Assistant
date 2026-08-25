@@ -158,7 +158,6 @@ const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
 const accountTrigger = document.getElementById("accountTrigger");
 const accountPopup = document.getElementById("accountPopup");
-const popupSettingsBtn = document.getElementById("popupSettingsBtn");
 
 function closeAccountPopup() {
   accountPopup.classList.add("hidden");
@@ -176,11 +175,6 @@ document.addEventListener("click", (e) => {
   if (!accountPopup.classList.contains("hidden") && !accountBlock.contains(e.target)) {
     closeAccountPopup();
   }
-});
-
-popupSettingsBtn.addEventListener("click", () => {
-  closeAccountPopup();
-  settingsBtn.click();
 });
 
 function closeProjectSwitcher() {
