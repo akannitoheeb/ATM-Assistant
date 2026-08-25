@@ -2354,6 +2354,11 @@ body {
   background: var(--gold-deep);
 }
 
+.guest-block {
+  padding: 2px 8px 4px 8px;
+  position: relative; /* anchors #guestPopup */
+}
+
 /* Login gate is now a modal instead of a full-screen takeover */
 .login-modal {
   max-width: 380px;
