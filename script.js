@@ -32,6 +32,11 @@ const brandVoice = document.getElementById("brandVoice");
 const brandAvoidWords = document.getElementById("brandAvoidWords");
 const brandSampleEmail = document.getElementById("brandSampleEmail");
 
+const popupSettingsBtn = document.getElementById("popupSettingsBtn");
+const guestTrigger = document.getElementById("guestTrigger");
+const guestPopup = document.getElementById("guestPopup");
+const guestSettingsBtn = document.getElementById("guestSettingsBtn");
+
 const projectSwitcherBtn = document.getElementById("projectSwitcherBtn");
 const projectSwitcherPopup = document.getElementById("projectSwitcherPopup");
 const activeProjectLabel = document.getElementById("activeProjectLabel");
@@ -151,7 +156,6 @@ const sidebarOpenBtn = document.getElementById("sidebarOpenBtn");
 const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
 const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
-const settingsBtn = document.getElementById("settingsBtn");
 const accountTrigger = document.getElementById("accountTrigger");
 const accountPopup = document.getElementById("accountPopup");
 const popupSettingsBtn = document.getElementById("popupSettingsBtn");
@@ -1196,10 +1200,39 @@ async function saveUserData() {
 // --------------------------------------------------------------
 // Settings panel
 // --------------------------------------------------------------
-settingsBtn.addEventListener("click", () => {
+
+function openSettingsPanel() {
   resetSettingsTabs();
   applySettingsToForm();
   settingsOverlay.classList.remove("hidden");
+}
+
+popupSettingsBtn.addEventListener("click", () => {
+  closeAccountPopup();
+  openSettingsPanel();
+});
+
+function closeGuestPopup() {
+  guestPopup.classList.add("hidden");
+  guestTrigger.setAttribute("aria-expanded", "false");
+}
+
+guestTrigger.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = guestPopup.classList.contains("hidden");
+  guestPopup.classList.toggle("hidden", !willOpen);
+  guestTrigger.setAttribute("aria-expanded", String(willOpen));
+});
+
+document.addEventListener("click", (e) => {
+  if (!guestPopup.classList.contains("hidden") && !guestBlock.contains(e.target)) {
+    closeGuestPopup();
+  }
+});
+
+guestSettingsBtn.addEventListener("click", () => {
+  closeGuestPopup();
+  openSettingsPanel();
 });
 
 closeSettingsBtn.addEventListener("click", () => {
