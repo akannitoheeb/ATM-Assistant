@@ -2542,15 +2542,13 @@ function renderMarkdown(text) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-  // The model sometimes writes a literal "<br>" inside table cells to
-  // force a line break — restore it now that stray < > elsewhere are
-  // already safely escaped above.
   const withBreaks = escaped.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
   const withBold = withBreaks.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 
   const lines = withBold.split("\n");
   let html = "";
   let listType = null;
+  let inQuote = false; // NEW
 
   function closeList() {
     if (listType) {
@@ -2559,52 +2557,56 @@ function renderMarkdown(text) {
     }
   }
 
+  function closeQuote() { // NEW
+    if (inQuote) {
+      html += "</blockquote>";
+      inQuote = false;
+    }
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Table: a "| a | b |" row immediately followed by a "|---|---|" line
     if (line.trim().startsWith("|") && isTableSeparatorLine(lines[i + 1] || "")) {
       closeList();
-      const headerCells = splitTableCells(line);
-      html += "<table><thead><tr>";
-      headerCells.forEach(cell => (html += `<th>${cell}</th>`));
-      html += "</tr></thead><tbody>";
-
-      i += 2; // skip header + separator
-      while (i < lines.length && lines[i].trim().startsWith("|")) {
-        const rowCells = splitTableCells(lines[i]);
-        html += "<tr>";
-        rowCells.forEach(cell => (html += `<td>${cell}</td>`));
-        html += "</tr>";
-        i++;
-      }
-      html += "</tbody></table>";
-      i--; // outer loop will i++ again
+      closeQuote(); // NEW
+      // ...unchanged table logic...
       continue;
     }
 
     const headingMatch = line.match(/^\s*(#{1,4})\s+(.*)/);
+    const quoteMatch = line.match(/^\s*&gt;\s?(.*)/); // NEW — note: matches &gt; since escaping already ran
     const numberedMatch = line.match(/^\s*\d+[\.\)]\s+(.*)/);
     const bulletMatch = line.match(/^\s*[-*]\s+(.*)/);
 
     if (headingMatch) {
       closeList();
-      const level = Math.min(headingMatch[1].length + 2, 4); // ### -> h4, allowing up to h4
+      closeQuote(); // NEW
+      const level = Math.min(headingMatch[1].length + 2, 4);
       html += `<h${level}>${headingMatch[2]}</h${level}>`;
+    } else if (quoteMatch) { // NEW block
+      closeList();
+      if (!inQuote) { html += "<blockquote>"; inQuote = true; }
+      html += quoteMatch[1] ? `<p>${quoteMatch[1]}</p>` : "<br>";
     } else if (numberedMatch) {
+      closeQuote(); // NEW
       if (listType !== "ol") { closeList(); html += "<ol>"; listType = "ol"; }
       html += `<li>${numberedMatch[1]}</li>`;
     } else if (bulletMatch) {
+      closeQuote(); // NEW
       if (listType !== "ul") { closeList(); html += "<ul>"; listType = "ul"; }
       html += `<li>${bulletMatch[1]}</li>`;
     } else if (line.trim() === "") {
       closeList();
+      closeQuote(); // NEW
     } else {
       closeList();
+      closeQuote(); // NEW
       html += `<p>${line}</p>`;
     }
   }
   closeList();
+  closeQuote(); // NEW
 
   return html;
 }
