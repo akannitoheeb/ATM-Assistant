@@ -1383,6 +1383,21 @@ body {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.message.assistant .bubble blockquote {
+  margin: 0 0 12px 0;
+  padding: 4px 0 4px 12px;
+  border-left: 3px solid var(--gold);
+  color: var(--text-soft);
+}
+
+.message.assistant .bubble blockquote p {
+  margin: 0 0 6px 0;
+}
+
+.message.assistant .bubble blockquote p:last-child {
+  margin-bottom: 0;
+}
+
 .message.user .bubble {
   background: var(--user-bubble);
   color: var(--text);
