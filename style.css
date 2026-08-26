@@ -2133,7 +2133,7 @@ body {
   color: var(--text);
   font-family: var(--font-body);
   font-size: 15px;
-  max-height: 160px;
+  max-height: 40vh;
   padding: 6px 0;
 }
 
