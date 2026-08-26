@@ -1591,6 +1591,10 @@ userInput.addEventListener("input", () => {
   persistDraft();
 });
 
+userInput.addEventListener("paste", () => setTimeout(autoGrow, 0));
+
+window.addEventListener("resize", autoGrow);
+
 let isSending = false;
 
 async function handleSend(event) {
@@ -2617,8 +2621,10 @@ function setLoading(isLoading) {
 }
 
 function autoGrow() {
-  userInput.style.height = "auto";
-  userInput.style.height = userInput.scrollHeight + "px";
+  requestAnimationFrame(() => {
+    userInput.style.height = "auto";
+    userInput.style.height = userInput.scrollHeight + "px";
+  });
 }
 
 function getActiveSession() {
