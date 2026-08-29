@@ -177,18 +177,6 @@ if the user's own message includes emoji, or in the rare moment a touch of
 humor or genuine sympathy calls for it.
 `.trim();
 
-const {
-  messages, settings, mode, includeLandingPage,
-  includeRepurpose, sequenceLength, webSearch, privateMode
-} = req.body || {};
-
-let memory = null;
-if (user && !privateMode) {
-  const latestUserText = getLatestUserText(messages);
-  const existingMemories = (settings?.memories || []).map((m) => m.text);
-  memory = await extractMemory(apiKey, latestUserText, reply, existingMemories);
-}
-
 // --------------------------------------------------------------
 // Shared schema building blocks — pulled out to their own consts so
 // both the single-campaign schema and (in principle) any future
@@ -736,6 +724,7 @@ module.exports = async function (req, res) {
     includeRepurpose,
     sequenceLength,
     webSearch
+    privateMode
   } = req.body || {};
 
   const requestWeight = getRequestWeight(mode, { includeLandingPage, includeRepurpose, sequenceLength });
@@ -881,7 +870,7 @@ module.exports = async function (req, res) {
     // Only logged-in users have persisted settings for memory to land
     // in, so there's no point spending a second API call on guests.
     let memory = null;
-    if (user) {
+    if (user && !privateMode) {
       const latestUserText = getLatestUserText(messages);
       const existingMemories = (settings?.memories || []).map((m) => m.text);
       memory = await extractMemory(apiKey, latestUserText, reply, existingMemories);
