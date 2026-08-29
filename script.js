@@ -1253,20 +1253,6 @@ async function saveUserData() {
   }
 }
 
-  try {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    const { error } = await supabaseClient.from("user_data").upsert({
-      user_id: user.id,
-      sessions,
-      settings,
-      updated_at: new Date().toISOString()
-    });
-    if (error) throw error;
-  } catch (error) {
-    console.error("Failed to save data:", error);
-  }
-}
-
 // --------------------------------------------------------------
 // Settings panel
 // --------------------------------------------------------------
