@@ -316,13 +316,6 @@ function deleteProject(projectId) {
   renderActiveChat();
 }
 
-function persistActiveState() {
-  if (isPrivateMode) return;
-  try {
-    localStorage.setItem(LAST_ACTIVE_KEY, JSON.stringify({ activeId, activeProjectId }));
-  } catch (error) {}
-}
-
 // --------------------------------------------------------------
 // Tools popup (replaces separate unlabeled icon buttons) — a
 // single "+" button that opens a labeled menu, same pattern as
@@ -1244,11 +1237,21 @@ function applyProStatusToUI(isActivePro) {
 }
 
 async function saveUserData() {
-  if (isGuest || isPrivateMode) return;
-  ...
+  if (isGuest || isPrivateMode) return; // nothing to persist for a guest or private session
 
-async function saveUserData() {
-  if (isGuest) return; // nothing to persist for a guest session
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { error } = await supabaseClient.from("user_data").upsert({
+      user_id: user.id,
+      sessions,
+      settings,
+      updated_at: new Date().toISOString()
+    });
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to save data:", error);
+  }
+}
 
   try {
     const { data: { user } } = await supabaseClient.auth.getUser();
