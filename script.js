@@ -47,6 +47,7 @@ let activeProjectId = null; // null = "General" — the default/legacy bucket
 
 const authOverlay = document.getElementById("authOverlay");
 const closeAuthBtn = document.getElementById("closeAuthBtn");
+const voiceSelect = document.getElementById("voiceSelect");
 
 const greetingState = document.getElementById("greetingState");
 const chatLog = document.getElementById("chatLog");
@@ -140,15 +141,44 @@ function toggleSpeak(text, btn) {
     if (b.textContent === "Stop") b.textContent = "Listen";
   });
 
-  if (wasThisOneSpeaking) return; // this button's own click was the "stop" tap
+  if (wasThisOneSpeaking) return;
 
-  const plainText = text.replace(/[*_#`]/g, ""); // strip stray markdown before speaking
+  const plainText = text.replace(/[*_#`]/g, "");
   const utterance = new SpeechSynthesisUtterance(plainText);
+
+  if (settings.voiceURI) {
+    const chosenVoice = speechSynthesis.getVoices().find(v => v.voiceURI === settings.voiceURI);
+    if (chosenVoice) utterance.voice = chosenVoice;
+  }
+
   utterance.onend = () => { btn.textContent = "Listen"; };
   utterance.onerror = () => { btn.textContent = "Listen"; };
 
   btn.textContent = "Stop";
   speechSynthesis.speak(utterance);
+}
+
+function populateVoiceOptions() {
+  if (!("speechSynthesis" in window)) return;
+  const voices = speechSynthesis.getVoices();
+  if (voices.length === 0) return; // retries via voiceschanged below
+
+  const currentValue = voiceSelect.value;
+  voiceSelect.innerHTML = '<option value="">Default</option>';
+  voices
+    .filter(v => v.lang.startsWith("en"))
+    .forEach((v) => {
+      const opt = document.createElement("option");
+      opt.value = v.voiceURI;
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceSelect.appendChild(opt);
+    });
+  voiceSelect.value = currentValue;
+}
+
+if ("speechSynthesis" in window) {
+  populateVoiceOptions();
+  speechSynthesis.addEventListener("voiceschanged", populateVoiceOptions);
 }
 
 const sidebar = document.getElementById("sidebar");
@@ -261,6 +291,7 @@ newProjectBtn.addEventListener("click", () => {
   switchProject(project.id);
 });
 
+
 function deleteProject(projectId) {
   const project = (settings.projects || []).find((p) => p.id === projectId);
   if (!project) return;
@@ -285,6 +316,13 @@ function deleteProject(projectId) {
   renderActiveChat();
 }
 
+function persistActiveState() {
+  if (isPrivateMode) return;
+  try {
+    localStorage.setItem(LAST_ACTIVE_KEY, JSON.stringify({ activeId, activeProjectId }));
+  } catch (error) {}
+}
+
 // --------------------------------------------------------------
 // Tools popup (replaces separate unlabeled icon buttons) — a
 // single "+" button that opens a labeled menu, same pattern as
@@ -301,6 +339,8 @@ const toolsSequenceItem = document.getElementById("toolsSequenceItem");
 const toolsSequenceLengthRow = document.getElementById("toolsSequenceLengthRow");
 const toolsWebSearchItem = document.getElementById("toolsWebSearchItem");
 let webSearchMode = false;
+const toolsPrivateItem = document.getElementById("toolsPrivateItem");
+const privateModeBanner = document.getElementById("privateModeBanner");
 
 function closeToolsPopup() {
   toolsPopup.classList.add("hidden");
@@ -346,6 +386,10 @@ function renderToolsPopupState() {
   toolsWebSearchItem.setAttribute("aria-pressed", String(webSearchMode));
 
   toolsBtn.classList.toggle("has-active", campaignMode || sequenceMode || webSearchMode);
+
+  toolsPrivateItem.classList.toggle("hidden", isGuest);
+  toolsPrivateItem.classList.toggle("active", isPrivateMode);
+  toolsPrivateItem.setAttribute("aria-pressed", String(isPrivateMode));
 
   // Free plan: lock the heavier campaign add-ons and sequence mode,
   // and show a "PRO" badge on them instead of just hiding them.
@@ -424,6 +468,27 @@ toolsSequenceLengthRow.querySelectorAll(".sequence-length-btn").forEach((btn) =>
     renderToolsPopupState();
   });
 });
+
+toolsPrivateItem.addEventListener("click", () => {
+  if (isGuest) return;
+  togglePrivateMode();
+});
+
+function togglePrivateMode() {
+  isPrivateMode = !isPrivateMode;
+  activeId = null;
+  privateSession = null;
+  closeToolsPopup();
+  renderToolsPopupState();
+  renderPrivateBanner();
+  renderSidebar();
+  renderActiveChat();
+}
+
+function renderPrivateBanner() {
+  document.body.classList.toggle("private-mode-active", isPrivateMode);
+  privateModeBanner.classList.toggle("hidden", !isPrivateMode);
+}
 
 toolsWebSearchItem.addEventListener("click", () => {
   webSearchMode = !webSearchMode;
@@ -651,6 +716,8 @@ let activeId = null;
 let settings = defaultSettings();
 let isGuest = true; // flips to false once logged in
 let isActivePro = false; // read anywhere in the UI to lock/unlock Pro-only tools
+let isPrivateMode = false;
+let privateSession = null; // in-memory only — never pushed to `sessions`, never saved
 
 // --------------------------------------------------------------
 // Persistence across reloads — iOS Safari reloads background tabs from
@@ -1032,6 +1099,8 @@ function showGuestMode() {
   activeProjectLabel.textContent = "Project";
   applySettingsToForm();
   renderMemoryList();
+  populateVoiceOptions();
+  voiceSelect.value = settings.voiceURI || "";
 } 
 
 // --------------------------------------------------------------
@@ -1175,6 +1244,10 @@ function applyProStatusToUI(isActivePro) {
 }
 
 async function saveUserData() {
+  if (isGuest || isPrivateMode) return;
+  ...
+
+async function saveUserData() {
   if (isGuest) return; // nothing to persist for a guest session
 
   try {
@@ -1245,6 +1318,7 @@ saveSettingsBtn.addEventListener("click", () => {
   settings.emphasizeNigeria = nigeriaToggle.checked;
   settings.aiDisclosure = aiDisclosureToggle.checked;
   settings.customInstruction = customInstruction.value.trim();
+  settings.voiceURI = voiceSelect.value;
 
   const newBrandProfile = {
     name: brandName.value.trim(),
@@ -1272,6 +1346,7 @@ function applySettingsToForm() {
   nigeriaToggle.checked = settings.emphasizeNigeria;
   aiDisclosureToggle.checked = settings.aiDisclosure;
   customInstruction.value = settings.customInstruction;
+  
 
   const bp = getActiveBrandProfile() || emptyBrandProfile();
   brandProfileLabel.textContent = `Brand Profile, ${getActiveProjectName()}`;
@@ -1609,16 +1684,21 @@ async function handleSend(event) {
   if (!text && pendingAttachments.length === 0) return;
 
   if (activeId === null) {
-    const newSession = {
-      id: Date.now().toString(),
-      title: (text || pendingAttachments[0].name).slice(0, 40),
-      messages: [],
-      projectId: activeProjectId
-    };
+  const newSession = {
+    id: Date.now().toString(),
+    title: (text || pendingAttachments[0].name).slice(0, 40),
+    messages: [],
+    projectId: activeProjectId
+  };
+
+  if (isPrivateMode) {
+    privateSession = newSession;
+  } else {
     sessions.unshift(newSession);
-    activeId = newSession.id;
-    persistActiveState();
   }
+  activeId = newSession.id;
+  persistActiveState();
+}
 
   let content = text;
   const attachmentSummary = pendingAttachments.map((a) => ({ kind: a.kind, name: a.name }));
@@ -1730,8 +1810,19 @@ async function handleSend(event) {
   const authHeaders = await getAuthHeaders();
 
   const cleanMessages = messages.map((msg) => ({ role: msg.role, content: msg.content }));
-  const settingsForRequest = { ...settings, brandProfile: getActiveBrandProfile() };
-
+  const settingsForRequest = isPrivateMode
+  ? {
+      tone: "friendly and warm",
+      region: settings.region || "us",
+      emphasizeNigeria: false,
+      customInstruction: "",
+      brandProfile: emptyBrandProfile(),
+      memories: [],
+      aiDisclosure: settings.aiDisclosure,
+      onboarded: true
+    }
+  : { ...settings, brandProfile: getActiveBrandProfile() };
+  
   // campaignOverrides lets a refine-in-place call pin the exact add-ons
   // of the campaign it's regenerating, instead of reading current UI
   // toggle state (which may have moved on since the original send).
@@ -1754,7 +1845,8 @@ async function handleSend(event) {
       includeLandingPage: mode === "campaign" ? landingFlag : undefined,
       includeRepurpose: mode === "campaign" ? repurposeFlag : undefined,
       sequenceLength: mode === "sequence" ? sequenceLength : undefined,
-      webSearch: isStructuredMode ? undefined : Boolean(useWebSearch)
+      webSearch: isStructuredMode ? undefined : Boolean(useWebSearch),
+      privateMode: Boolean(isPrivateMode)
     })
   });
 
@@ -2628,6 +2720,9 @@ function autoGrow() {
 }
 
 function getActiveSession() {
+  if (isPrivateMode) {
+    return (privateSession && privateSession.id === activeId) ? privateSession : null;
+  }
   return sessions.find(s => s.id === activeId) || null;
 }
 
