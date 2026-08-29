@@ -1067,6 +1067,24 @@ body {
   background: var(--gold-deep);
 }
 
+.disclaimer-text {
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-soft);
+  margin: -14px auto 10px auto;
+  max-width: 720px;
+  width: calc(100% - 40px);
+}
+
+@media (max-width: 720px) {
+  .disclaimer-text {
+    font-size: 11px;
+    margin: -18px auto calc(10px + env(safe-area-inset-bottom)) auto;
+    width: calc(100% - 24px);
+  }
+}
+
 /* ===================== Onboarding wizard ===================== */
 .onboarding-modal {
   max-width: 440px;
@@ -1418,6 +1436,24 @@ body {
   border-radius: 10px;
   display: block;
 }
+
+.private-mode-banner {
+  max-width: 720px;
+  width: calc(100% - 40px);
+  margin: 8px auto 0 auto;
+  background: rgba(107, 91, 140, 0.12);
+  border: 1px solid rgba(107, 91, 140, 0.4);
+  color: #B9A9D9;
+  font-size: 12.5px;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.private-mode-banner.hidden { display: none; }
+
+body.private-mode-active .chat-input-row { border-color: #6B5B8C; }
+body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-color: #6B5B8C; }
 
 /* Sources row under a web-search-backed reply */
 .sources-row {
