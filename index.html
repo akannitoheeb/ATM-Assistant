@@ -288,6 +288,11 @@
             </select>
             <p class="settings-hint">Tunes the deliverability checklist on generated campaigns to the legal requirements for that region. Pick the region most of your list is in.</p>
 
+          <label class="field-label" for="voiceSelect">Voice for "Listen" playback</label>
+<select id="voiceSelect">
+  <option value="">Default</option>
+</select>
+
           <label class="checkbox-row">
             <input type="checkbox" id="nigeriaToggle" checked />
             <span>Emphasize Nigerian market context in marketing answers</span>
@@ -422,6 +427,10 @@
         <p class="greeting-sub">Ask anything, especially sharp on email marketing.</p>
       </div>
 
+<div id="privateModeBanner" class="private-mode-banner hidden">
+  ◐ Private chat: this conversation won't be saved, and won't use memory or your brand profile.
+</div>
+
       <!-- Shown once a conversation starts -->
       <div id="chatLog" class="chat-log"></div>
 
@@ -438,7 +447,17 @@
             </span>
           </button>
 
-          <div class="tools-popup-divider"></div>
+        <div class="tools-popup-divider"></div>
+          
+          <button type="button" id="toolsPrivateItem" class="tools-popup-item hidden" aria-pressed="false">
+            <span class="tools-popup-item-text">
+              Private chat
+            <span class="tools-popup-item-hint">Not saved, no memory, no brand profile</span>
+          </span>
+  <span class="tools-popup-check">✓</span>
+</button>
+
+<div class="tools-popup-divider"></div>
 
           <button type="button" id="toolsCampaignItem" class="tools-popup-item" aria-pressed="false">
             <span class="tools-popup-item-text">
@@ -505,7 +524,7 @@
         </button>
         <button type="submit" id="sendBtn" aria-label="Send">↑</button>
       </form>
-
+     <p class="disclaimer-text">ATM Assistant can make mistakes. Consider checking important information.</p>
     </main>
 
   </div>
