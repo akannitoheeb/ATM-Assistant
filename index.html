@@ -109,6 +109,10 @@
 
      <div class="sidebar-bottom">
 
+  <button type="button" id="supportSidebarBtn" class="support-sidebar-btn">
+    <span>☕</span> Support this project
+  </button>
+
   <!-- Shown when nobody is logged in -->
   <div id="guestBlock" class="guest-block">
     <button type="button" id="guestTrigger" class="account-row" aria-haspopup="true" aria-expanded="false">
@@ -251,6 +255,36 @@
             </div>
           </div>
           <p id="upgradeError" class="auth-error hidden"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== SUPPORT / "BUY ME A COFFEE" MODAL ===================== -->
+    <div id="supportOverlay" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Support this project ☕</h2>
+          <button id="closeSupportBtn" class="modal-close" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-hint">Any amount helps keep ATM Assistant running and funds getting it onto the App Store and Google Play. Thank you!</p>
+
+          <div class="support-presets">
+            <button type="button" class="support-preset-btn" data-amount="1000">₦1,000</button>
+            <button type="button" class="support-preset-btn" data-amount="2500">₦2,500</button>
+            <button type="button" class="support-preset-btn" data-amount="5000">₦5,000</button>
+          </div>
+
+          <div class="support-amount-row">
+            <select id="supportCurrency" class="support-currency-select">
+              <option value="NGN">🇳🇬 NGN</option>
+              <option value="USD">🌍 USD</option>
+            </select>
+            <input type="number" id="supportAmount" class="support-amount-input" placeholder="Enter amount" min="1" step="1" />
+          </div>
+
+          <button type="button" id="supportSubmitBtn" class="support-submit-btn">Continue to payment</button>
+          <p id="supportError" class="auth-error hidden"></p>
         </div>
       </div>
     </div>
@@ -520,7 +554,7 @@
         </button>
         <button type="button" id="sendBtn" aria-label="Send">↑</button>
       </form>
-      <p class="disclaimer-text">ATM Assistant can make mistakes. Consider checking important information.</p>
+      <p class="disclaimer-text">ATM Assistant can make mistakes. Consider checking important information. <button type="button" id="supportFooterLink" class="support-footer-link">Support this project ☕</button></p>
     </main>
 
   </div>

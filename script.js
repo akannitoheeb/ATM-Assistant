@@ -21,6 +21,15 @@ const upgradeBtn = document.getElementById("upgradeBtn");
 const upgradeOverlay = document.getElementById("upgradeOverlay");
 const closeUpgradeBtn = document.getElementById("closeUpgradeBtn");
 const upgradeError = document.getElementById("upgradeError");
+
+const supportSidebarBtn = document.getElementById("supportSidebarBtn");
+const supportFooterLink = document.getElementById("supportFooterLink");
+const supportOverlay = document.getElementById("supportOverlay");
+const closeSupportBtn = document.getElementById("closeSupportBtn");
+const supportCurrency = document.getElementById("supportCurrency");
+const supportAmount = document.getElementById("supportAmount");
+const supportSubmitBtn = document.getElementById("supportSubmitBtn");
+const supportError = document.getElementById("supportError");
 const userEmail = document.getElementById("userEmail");
 const userAvatarImg = document.getElementById("userAvatarImg");
 const userAvatarInitial = document.getElementById("userAvatarInitial");
@@ -1140,6 +1149,78 @@ document.querySelectorAll(".currency-btn").forEach((btn) => {
       document.querySelectorAll(".currency-btn").forEach((b) => (b.disabled = false));
     }
   });
+});
+
+// --------------------------------------------------------------
+// Support this project ("Buy me a coffee") — a one-time, any-amount
+// payment via Flutterwave. Open to guests and logged-in users alike,
+// no account or subscription involved.
+// --------------------------------------------------------------
+function openSupportModal() {
+  supportError.classList.add("hidden");
+  supportAmount.value = "";
+  document.querySelectorAll(".support-preset-btn").forEach((b) => b.classList.remove("active"));
+  supportOverlay.classList.remove("hidden");
+}
+
+supportSidebarBtn.addEventListener("click", openSupportModal);
+supportFooterLink.addEventListener("click", openSupportModal);
+
+closeSupportBtn.addEventListener("click", () => {
+  supportOverlay.classList.add("hidden");
+});
+
+supportOverlay.addEventListener("click", (event) => {
+  if (event.target === supportOverlay) supportOverlay.classList.add("hidden");
+});
+
+document.querySelectorAll(".support-preset-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".support-preset-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    supportAmount.value = btn.dataset.amount;
+    supportCurrency.value = "NGN";
+  });
+});
+
+supportAmount.addEventListener("input", () => {
+  document.querySelectorAll(".support-preset-btn").forEach((b) => b.classList.remove("active"));
+});
+
+supportSubmitBtn.addEventListener("click", async () => {
+  supportError.classList.add("hidden");
+  const amount = Number(supportAmount.value);
+  const currency = supportCurrency.value;
+
+  if (!amount || amount <= 0) {
+    supportError.textContent = "Enter an amount first.";
+    supportError.classList.remove("hidden");
+    return;
+  }
+
+  supportSubmitBtn.disabled = true;
+  try {
+    // Guests have no session, so this only attaches an auth header
+    // when one exists — the backend doesn't require login for a
+    // one-time support payment.
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch("/api/create-support-payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify({ amount, currency })
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data.link) {
+      throw new Error(data.error || "Could not start payment.");
+    }
+
+    window.location.href = data.link;
+  } catch (error) {
+    supportError.textContent = error.message;
+    supportError.classList.remove("hidden");
+    supportSubmitBtn.disabled = false;
+  }
 });
 
 // Attaches the logged-in user's access token to a request, so our

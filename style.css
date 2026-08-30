@@ -2576,3 +2576,125 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* --------------------------------------------------------------
+   Support / "Buy me a coffee" button — sidebar row + footer link.
+   Uses the gold accent so it reads as a nice-to-have next to New
+   chat, not a system action.
+   -------------------------------------------------------------- */
+.support-sidebar-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 1px dashed var(--gold);
+  color: var(--gold);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: background 0.15s ease;
+}
+
+.support-sidebar-btn:hover {
+  background: rgba(160, 120, 32, 0.1);
+}
+
+.support-footer-link {
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-size: 11.5px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  margin-left: 4px;
+}
+
+.support-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 16px 0;
+}
+
+.support-currency-select {
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 12px 10px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.support-amount-input {
+  flex: 1;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+
+.support-amount-input:focus,
+.support-currency-select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.support-presets {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.support-preset-btn {
+  flex: 1;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.support-preset-btn:hover,
+.support-preset-btn.active {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.support-submit-btn {
+  width: 100%;
+  background: var(--gold);
+  color: var(--navy);
+  border: none;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.support-submit-btn:hover {
+  background: var(--gold-deep);
+}
+
+.support-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
