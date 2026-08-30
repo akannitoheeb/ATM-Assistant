@@ -2674,7 +2674,27 @@ function splitTableCells(line) {
 }
 
 function renderMarkdown(text) {
-  const escaped = text
+  // Pull multi-line display-math blocks ($$...$$ or \[...\]) out before the
+  // line-by-line paragraph splitting below runs. That loop wraps each line
+  // in its own <p>, which tears a block like:
+  //   \[
+  //   D = 1.5 \times 10^{8}
+  //   \]
+  // into three separate paragraphs, so KaTeX never finds the opening and
+  // closing delimiter together and the raw LaTeX shows up unrendered.
+  // Swapping each block for a single-line placeholder keeps it intact
+  // through the split, then it's restored (still one contiguous chunk)
+  // right before returning.
+  const mathBlocks = [];
+  const withPlaceholders = text.replace(
+    /\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$/g,
+    (match) => {
+      mathBlocks.push(match);
+      return `@@MATH_BLOCK_${mathBlocks.length - 1}@@`;
+    }
+  );
+
+  const escaped = withPlaceholders
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
@@ -2761,7 +2781,16 @@ function renderMarkdown(text) {
   closeList();
   closeQuote();
 
-  return html;
+  let result = html;
+  mathBlocks.forEach((block, i) => {
+    const escapedBlock = block
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    result = result.split(`@@MATH_BLOCK_${i}@@`).join(escapedBlock);
+  });
+
+  return result;
 }
 
 // --------------------------------------------------------------
