@@ -141,9 +141,9 @@ function toggleSpeak(text, btn) {
     if (b.textContent === "Stop") b.textContent = "Listen";
   });
 
-  if (wasThisOneSpeaking) return;
+  if (wasThisOneSpeaking) return; // this button's own click was the "stop" tap
 
-  const plainText = text.replace(/[*_#`]/g, "");
+  const plainText = text.replace(/[*_#`]/g, ""); // strip stray markdown before speaking
   const utterance = new SpeechSynthesisUtterance(plainText);
 
   if (settings.voiceURI) {
@@ -159,7 +159,7 @@ function toggleSpeak(text, btn) {
 }
 
 function populateVoiceOptions() {
-  if (!("speechSynthesis" in window)) return;
+  if (!("speechSynthesis" in window) || !voiceSelect) return;
   const voices = speechSynthesis.getVoices();
   if (voices.length === 0) return; // retries via voiceschanged below
 
@@ -291,7 +291,6 @@ newProjectBtn.addEventListener("click", () => {
   switchProject(project.id);
 });
 
-
 function deleteProject(projectId) {
   const project = (settings.projects || []).find((p) => p.id === projectId);
   if (!project) return;
@@ -303,7 +302,7 @@ function deleteProject(projectId) {
     if (s.projectId === projectId) s.projectId = null;
   });
 
-    if (activeProjectId === projectId) {
+  if (activeProjectId === projectId) {
     activeProjectId = null;
     activeProjectLabel.textContent = "Project";
     activeId = null;
@@ -331,9 +330,9 @@ const toolsRepurposeItem = document.getElementById("toolsRepurposeItem");
 const toolsSequenceItem = document.getElementById("toolsSequenceItem");
 const toolsSequenceLengthRow = document.getElementById("toolsSequenceLengthRow");
 const toolsWebSearchItem = document.getElementById("toolsWebSearchItem");
-let webSearchMode = false;
 const toolsPrivateItem = document.getElementById("toolsPrivateItem");
 const privateModeBanner = document.getElementById("privateModeBanner");
+let webSearchMode = false;
 
 function closeToolsPopup() {
   toolsPopup.classList.add("hidden");
@@ -378,11 +377,11 @@ function renderToolsPopupState() {
   toolsWebSearchItem.classList.toggle("active", webSearchMode);
   toolsWebSearchItem.setAttribute("aria-pressed", String(webSearchMode));
 
-  toolsBtn.classList.toggle("has-active", campaignMode || sequenceMode || webSearchMode);
-
   toolsPrivateItem.classList.toggle("hidden", isGuest);
   toolsPrivateItem.classList.toggle("active", isPrivateMode);
   toolsPrivateItem.setAttribute("aria-pressed", String(isPrivateMode));
+
+  toolsBtn.classList.toggle("has-active", campaignMode || sequenceMode || webSearchMode || isPrivateMode);
 
   // Free plan: lock the heavier campaign add-ons and sequence mode,
   // and show a "PRO" badge on them instead of just hiding them.
@@ -462,6 +461,11 @@ toolsSequenceLengthRow.querySelectorAll(".sequence-length-btn").forEach((btn) =>
   });
 });
 
+toolsWebSearchItem.addEventListener("click", () => {
+  webSearchMode = !webSearchMode;
+  renderToolsPopupState();
+});
+
 toolsPrivateItem.addEventListener("click", () => {
   if (isGuest) return;
   togglePrivateMode();
@@ -483,11 +487,6 @@ function renderPrivateBanner() {
   privateModeBanner.classList.toggle("hidden", !isPrivateMode);
 }
 
-toolsWebSearchItem.addEventListener("click", () => {
-  webSearchMode = !webSearchMode;
-  renderToolsPopupState();
-});
-
 function resetCampaignMode() {
   campaignMode = false;
   includeLandingPage = false;
@@ -496,10 +495,6 @@ function resetCampaignMode() {
   sequenceLength = 3;
   userInput.placeholder = "Message ATM Assistant…";
   renderToolsPopupState();
-    const lockedForFree = !isActivePro;
-  [toolsSequenceItem, toolsLandingItem, toolsRepurposeItem].forEach((item) => {
-    item.classList.toggle("locked", lockedForFree);
-  });
 }
 
 // --------------------------------------------------------------
@@ -711,6 +706,7 @@ let isGuest = true; // flips to false once logged in
 let isActivePro = false; // read anywhere in the UI to lock/unlock Pro-only tools
 let isPrivateMode = false;
 let privateSession = null; // in-memory only — never pushed to `sessions`, never saved
+let currentAbortController = null; // lets the stop button cancel an in-flight request
 
 // --------------------------------------------------------------
 // Persistence across reloads — iOS Safari reloads background tabs from
@@ -722,6 +718,7 @@ const LAST_ACTIVE_KEY = "atm_last_active";
 const DRAFT_KEY = "atm_draft_text";
 
 function persistActiveState() {
+  if (isPrivateMode) return; // never leak a private session id into localStorage
   try {
     localStorage.setItem(LAST_ACTIVE_KEY, JSON.stringify({ activeId, activeProjectId }));
   } catch (error) {
@@ -778,11 +775,13 @@ function restoreDraft() {
     // Ignore — worst case, the draft just doesn't come back.
   }
 }
+
 function defaultSettings() {
   return {
     tone: "friendly and warm",
     emphasizeNigeria: true,
     customInstruction: "",
+    voiceURI: "",
     brandProfile: {
       name: "",
       industry: "",
@@ -1074,13 +1073,15 @@ async function onLogin(user) {
     openOnboarding();
   }
 }
-  
+
 // --------------------------------------------------------------
 // Guest state — chat stays usable, nothing persists across reloads
 // --------------------------------------------------------------
 function showGuestMode() {
   isGuest = true;
   isActivePro = false;
+  isPrivateMode = false;
+  privateSession = null;
   accountBlock.classList.add("hidden");
   guestBlock.classList.remove("hidden");
   upgradeBtn.classList.add("hidden");
@@ -1092,9 +1093,9 @@ function showGuestMode() {
   activeProjectLabel.textContent = "Project";
   applySettingsToForm();
   renderMemoryList();
-  populateVoiceOptions();
-  voiceSelect.value = settings.voiceURI || "";
-} 
+  renderPrivateBanner();
+  renderToolsPopupState();
+}
 
 // --------------------------------------------------------------
 // Upgrade to Pro
@@ -1140,6 +1141,7 @@ document.querySelectorAll(".currency-btn").forEach((btn) => {
     }
   });
 });
+
 // Attaches the logged-in user's access token to a request, so our
 // chat function knows who's asking. Guests send no auth header at all.
 async function getAuthHeaders() {
@@ -1174,6 +1176,7 @@ async function loadUserData() {
     // has brand info saved — only for genuinely blank, pre-feature profiles.
     settings.onboarded = settings.onboarded === undefined ? false : settings.onboarded;
     settings.region = settings.region || "us";
+    settings.voiceURI = settings.voiceURI || "";
   } catch (error) {
     console.error("Failed to load data:", error);
     sessions = [];
@@ -1335,7 +1338,9 @@ function applySettingsToForm() {
   nigeriaToggle.checked = settings.emphasizeNigeria;
   aiDisclosureToggle.checked = settings.aiDisclosure;
   customInstruction.value = settings.customInstruction;
-  
+
+  populateVoiceOptions();
+  voiceSelect.value = settings.voiceURI || "";
 
   const bp = getActiveBrandProfile() || emptyBrandProfile();
   brandProfileLabel.textContent = `Brand Profile, ${getActiveProjectName()}`;
@@ -1353,14 +1358,6 @@ function applySettingsToForm() {
 // just visually hidden) and shows a small floating re-open tab.
 // Mobile: same off-canvas slide behaviour as before, plus a backdrop.
 // --------------------------------------------------------------
-// Two toggle buttons that are never visible at the same time by
-// construction, not by manual bookkeeping:
-//   - sidebarCloseBtn lives INSIDE the sidebar, so it vanishes the
-//     instant the sidebar collapses/slides away.
-//   - sidebarOpenBtn lives OUTSIDE, fixed in the corner, and JS shows
-//     it only while the sidebar is closed.
-// That's what fixes the "two buttons stacked" bug — there's no
-// longer a state where both can render at once.
 function isMobileViewport() {
   return window.matchMedia("(max-width: 720px)").matches;
 }
@@ -1640,8 +1637,25 @@ function addTypingIndicator() {
 // --------------------------------------------------------------
 // Sending a message
 // --------------------------------------------------------------
-chatForm.removeEventListener("submit", handleSend);
 chatForm.addEventListener("submit", handleSend);
+
+// The send button doubles as a stop button while a request is in
+// flight (see setLoading). It's type="button" in the HTML so it
+// never auto-submits the form on its own — this handler decides
+// which action to take based on current state.
+sendBtn.addEventListener("click", () => {
+  if (isSending) {
+    stopResponse();
+  } else {
+    chatForm.requestSubmit();
+  }
+});
+
+function stopResponse() {
+  if (currentAbortController) {
+    currentAbortController.abort();
+  }
+}
 
 userInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
@@ -1664,30 +1678,32 @@ let isSending = false;
 async function handleSend(event) {
   event.preventDefault();
 
+  if (isSending) return; // ignore accidental double-submits while a request is in flight
+
   if (pendingAttachments.some((a) => a.kind === "loading")) {
     alert("Still reading an attached file — give it a second and try again.");
     return;
   }
 
-    const text = userInput.value.trim();
+  const text = userInput.value.trim();
   if (!text && pendingAttachments.length === 0) return;
 
   if (activeId === null) {
-  const newSession = {
-    id: Date.now().toString(),
-    title: (text || pendingAttachments[0].name).slice(0, 40),
-    messages: [],
-    projectId: activeProjectId
-  };
+    const newSession = {
+      id: Date.now().toString(),
+      title: (text || pendingAttachments[0].name).slice(0, 40),
+      messages: [],
+      projectId: activeProjectId
+    };
 
-  if (isPrivateMode) {
-    privateSession = newSession;
-  } else {
-    sessions.unshift(newSession);
+    if (isPrivateMode) {
+      privateSession = newSession;
+    } else {
+      sessions.unshift(newSession);
+    }
+    activeId = newSession.id;
+    persistActiveState();
   }
-  activeId = newSession.id;
-  persistActiveState();
-}
 
   let content = text;
   const attachmentSummary = pendingAttachments.map((a) => ({ kind: a.kind, name: a.name }));
@@ -1720,6 +1736,9 @@ async function handleSend(event) {
   pendingAttachments = [];
   renderAttachmentPreview();
   autoGrow();
+
+  isSending = true;
+  currentAbortController = new AbortController();
   setLoading(true);
   addTypingIndicator();
 
@@ -1727,9 +1746,9 @@ async function handleSend(event) {
   const useWebSearch = webSearchMode;
 
   try {
-    const result = await callGroqAPI(session.messages, mode, useWebSearch);
+    const result = await callGroqAPI(session.messages, mode, useWebSearch, undefined, currentAbortController.signal);
 
-      if (mode === "campaign") {
+    if (mode === "campaign") {
       session.messages.push({
         role: "assistant",
         content: campaignToText(result.campaign),
@@ -1738,10 +1757,10 @@ async function handleSend(event) {
         aiDisclosure: result.aiDisclosure,
         kind: "campaign"
       });
-      
+
       saveUserData();
       renderActiveChat();
-        } else if (mode === "sequence") {
+    } else if (mode === "sequence") {
       session.messages.push({
         role: "assistant",
         content: sequenceToText(result.sequence),
@@ -1753,7 +1772,7 @@ async function handleSend(event) {
 
       saveUserData();
       renderActiveChat();
-       } else {
+    } else {
       session.messages.push({ role: "assistant", content: result.reply, sources: result.sources });
 
       if (result.memory) {
@@ -1767,11 +1786,16 @@ async function handleSend(event) {
       saveUserData();
       renderActiveChat({ typeLast: true });
     }
-    
-    } catch (error) {
+  } catch (error) {
     console.error(error);
 
-    if (error.code === "GUEST_LIMIT") {
+    const typingIndicator = document.getElementById("typingIndicator");
+    if (typingIndicator) typingIndicator.remove();
+
+    if (error.name === "AbortError") {
+      // User hit stop — nothing more to do, the partial request is
+      // simply discarded. No error bubble, no retry.
+    } else if (error.code === "GUEST_LIMIT") {
       session.messages.pop();
       renderActiveChat();
       openAuthModal();
@@ -1783,35 +1807,35 @@ async function handleSend(event) {
       session.messages.push({ role: "assistant", content: "⚠️ " + error.message });
       renderActiveChat();
     }
-    
-    } finally {
+  } finally {
     setLoading(false);
     resetCampaignMode();
     isSending = false;
+    currentAbortController = null;
   }
 }
 
 // --------------------------------------------------------------
 // API call
 // --------------------------------------------------------------
-
-  async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides) {
+async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, signal) {
   const authHeaders = await getAuthHeaders();
 
   const cleanMessages = messages.map((msg) => ({ role: msg.role, content: msg.content }));
+
   const settingsForRequest = isPrivateMode
-  ? {
-      tone: "friendly and warm",
-      region: settings.region || "us",
-      emphasizeNigeria: false,
-      customInstruction: "",
-      brandProfile: emptyBrandProfile(),
-      memories: [],
-      aiDisclosure: settings.aiDisclosure,
-      onboarded: true
-    }
-  : { ...settings, brandProfile: getActiveBrandProfile() };
-  
+    ? {
+        tone: "friendly and warm",
+        region: settings.region || "us",
+        emphasizeNigeria: false,
+        customInstruction: "",
+        brandProfile: emptyBrandProfile(),
+        memories: [],
+        aiDisclosure: settings.aiDisclosure,
+        onboarded: true
+      }
+    : { ...settings, brandProfile: getActiveBrandProfile() };
+
   // campaignOverrides lets a refine-in-place call pin the exact add-ons
   // of the campaign it's regenerating, instead of reading current UI
   // toggle state (which may have moved on since the original send).
@@ -1836,12 +1860,13 @@ async function handleSend(event) {
       sequenceLength: mode === "sequence" ? sequenceLength : undefined,
       webSearch: isStructuredMode ? undefined : Boolean(useWebSearch),
       privateMode: Boolean(isPrivateMode)
-    })
+    }),
+    signal
   });
 
   const data = await response.json();
 
-    if (!response.ok) {
+  if (!response.ok) {
     const err = new Error(data.error || `Request failed with status ${response.status}`);
     if (data.code) err.code = data.code;
     throw err;
@@ -1857,7 +1882,7 @@ async function handleSend(event) {
     return { sequence: data.sequence, warnings: data.warnings || [], aiDisclosure: Boolean(data.aiDisclosure) };
   }
 
-    if (!data.reply) throw new Error("No text returned from the API.");
+  if (!data.reply) throw new Error("No text returned from the API.");
   return { reply: data.reply.trim(), sources: data.sources || [], memory: data.memory || null };
 }
 
@@ -1890,14 +1915,14 @@ function renderSidebar() {
     // requires a tap-to-click target to match its hover target, or the
     // first tap only "hovers" and a second tap is needed to actually
     // fire the click. This is what fixes "double tap to open a chat".
-      item.addEventListener("click", () => {
+    item.addEventListener("click", () => {
       activeId = session.id;
       persistActiveState();
       renderSidebar();
       renderActiveChat();
       if (isMobileViewport()) closeSidebar();
     });
-    
+
     const label = document.createElement("span");
     label.className = "history-item-label";
     label.textContent = session.title || "New chat";
@@ -1924,7 +1949,7 @@ function handleHistoryMenu(sessionId) {
   const newTitle = prompt("Rename this chat (leave blank to delete it):", session.title);
   if (newTitle === null) return;
 
-    if (newTitle.trim() === "") {
+  if (newTitle.trim() === "") {
     if (confirm("Delete this chat? This can't be undone.")) {
       sessions = sessions.filter(s => s.id !== sessionId);
       if (activeId === sessionId) activeId = sessions.length > 0 ? sessions[0].id : null;
@@ -2042,6 +2067,7 @@ function addMessageToDOM(msg, kind, animate = false) {
       typeWriterEffect(bubble, textPart);
     } else {
       bubble.innerHTML = renderMarkdown(textPart);
+      renderMathIn(bubble);
     }
   } else {
     bubble.textContent = textPart;
@@ -2085,7 +2111,7 @@ function addMessageToDOM(msg, kind, animate = false) {
 
 // Small "Sources" row under a web-search-backed reply — expects
 // sources as [{ title, url }], returned by the backend.
-  function buildSourcesRow(sources) {
+function buildSourcesRow(sources) {
   const row = document.createElement("div");
   row.className = "sources-row";
 
@@ -2255,7 +2281,7 @@ function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, is
 
   card.appendChild(campaignField("Preheader", campaign.preheader));
   card.appendChild(campaignField("Body", campaign.body, true));
-card.appendChild(campaignField("Call to action", campaign.cta_text));
+  card.appendChild(campaignField("Call to action", campaign.cta_text));
 
   if (campaign.landing_page) {
     const lp = campaign.landing_page;
@@ -2316,13 +2342,11 @@ card.appendChild(campaignField("Call to action", campaign.cta_text));
     card.appendChild(okMsg);
   }
 
-    const copyBtn = document.createElement("button");
-  
+  const copyBtn = document.createElement("button");
   copyBtn.className = "campaign-copy-btn";
   copyBtn.textContent = "Copy full campaign";
   copyBtn.addEventListener("click", () => {
     navigator.clipboard.writeText(campaignToText(campaign));
-
     copyBtn.textContent = "Copied";
     setTimeout(() => { copyBtn.textContent = "Copy full campaign"; }, 1200);
   });
@@ -2566,6 +2590,7 @@ function campaignField(label, value, isBody = false) {
   valueEl.className = isBody ? "campaign-body-text" : "campaign-value";
   if (isBody) {
     valueEl.innerHTML = renderMarkdown(value || "");
+    renderMathIn(valueEl);
   } else {
     valueEl.textContent = value || "";
   }
@@ -2593,6 +2618,10 @@ function typeWriterEffect(el, fullText, speedMs = 16) {
     }
     if (i < tokens.length) {
       setTimeout(step, speedMs);
+    } else {
+      // Only render math once typing is fully done — mid-typing LaTeX
+      // is incomplete/garbled and would flash broken output.
+      renderMathIn(el);
     }
   }
 
@@ -2603,6 +2632,29 @@ function getUserInitial() {
   if (isGuest) return "G";
   const email = userEmail.textContent || "";
   return email.charAt(0).toUpperCase() || "U";
+}
+
+// --------------------------------------------------------------
+// Math rendering — KaTeX auto-render, applied after markdown has
+// already turned the raw text into HTML. Safe to call even before
+// the KaTeX scripts (loaded with `defer`) have finished loading;
+// it just silently does nothing until then.
+// --------------------------------------------------------------
+function renderMathIn(el) {
+  if (!window.renderMathInElement) return;
+  try {
+    window.renderMathInElement(el, {
+      delimiters: [
+        { left: "$$", right: "$$", display: true },
+        { left: "\\[", right: "\\]", display: true },
+        { left: "$", right: "$", display: false },
+        { left: "\\(", right: "\\)", display: false }
+      ],
+      throwOnError: false
+    });
+  } catch (error) {
+    console.error("KaTeX render failed:", error);
+  }
 }
 
 // --------------------------------------------------------------
@@ -2633,7 +2685,7 @@ function renderMarkdown(text) {
   const lines = withBold.split("\n");
   let html = "";
   let listType = null;
-  let inQuote = false; // NEW
+  let inQuote = false;
 
   function closeList() {
     if (listType) {
@@ -2642,7 +2694,7 @@ function renderMarkdown(text) {
     }
   }
 
-  function closeQuote() { // NEW
+  function closeQuote() {
     if (inQuote) {
       html += "</blockquote>";
       inQuote = false;
@@ -2653,75 +2705,82 @@ function renderMarkdown(text) {
     const line = lines[i];
 
     if (line.trim().startsWith("|") && isTableSeparatorLine(lines[i + 1] || "")) {
-  closeList();
-  closeQuote();
+      closeList();
+      closeQuote();
 
-  const headerCells = splitTableCells(line);
-  html += "<table><thead><tr>";
-  headerCells.forEach(cell => { html += `<th>${cell}</th>`; });
-  html += "</tr></thead><tbody>";
+      const headerCells = splitTableCells(line);
+      html += "<table><thead><tr>";
+      headerCells.forEach(cell => { html += `<th>${cell}</th>`; });
+      html += "</tr></thead><tbody>";
 
-  i += 2; // skip the header row and the |---|---| separator row
-  while (i < lines.length && lines[i].trim().startsWith("|")) {
-    const rowCells = splitTableCells(lines[i]);
-    html += "<tr>";
-    rowCells.forEach(cell => { html += `<td>${cell}</td>`; });
-    html += "</tr>";
-    i++;
-  }
-  i--; // back up one, since the for-loop's own i++ will advance past it
+      i += 2; // skip the header row and the |---|---| separator row
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        const rowCells = splitTableCells(lines[i]);
+        html += "<tr>";
+        rowCells.forEach(cell => { html += `<td>${cell}</td>`; });
+        html += "</tr>";
+        i++;
+      }
+      i--; // back up one — the for-loop's own i++ will advance past it
 
-  html += "</tbody></table>";
-  continue;
-}
+      html += "</tbody></table>";
+      continue;
+    }
 
     const headingMatch = line.match(/^\s*(#{1,4})\s+(.*)/);
-    const quoteMatch = line.match(/^\s*&gt;\s?(.*)/); // NEW — note: matches &gt; since escaping already ran
+    const quoteMatch = line.match(/^\s*&gt;\s?(.*)/); // note: matches &gt; since escaping already ran
     const numberedMatch = line.match(/^\s*\d+[\.\)]\s+(.*)/);
     const bulletMatch = line.match(/^\s*[-*]\s+(.*)/);
 
     if (headingMatch) {
       closeList();
-      closeQuote(); // NEW
+      closeQuote();
       const level = Math.min(headingMatch[1].length + 2, 4);
       html += `<h${level}>${headingMatch[2]}</h${level}>`;
-    } else if (quoteMatch) { // NEW block
+    } else if (quoteMatch) {
       closeList();
       if (!inQuote) { html += "<blockquote>"; inQuote = true; }
       html += quoteMatch[1] ? `<p>${quoteMatch[1]}</p>` : "<br>";
     } else if (numberedMatch) {
-      closeQuote(); // NEW
+      closeQuote();
       if (listType !== "ol") { closeList(); html += "<ol>"; listType = "ol"; }
       html += `<li>${numberedMatch[1]}</li>`;
     } else if (bulletMatch) {
-      closeQuote(); // NEW
+      closeQuote();
       if (listType !== "ul") { closeList(); html += "<ul>"; listType = "ul"; }
       html += `<li>${bulletMatch[1]}</li>`;
     } else if (line.trim() === "") {
       closeList();
-      closeQuote(); // NEW
+      closeQuote();
     } else {
       closeList();
-      closeQuote(); // NEW
+      closeQuote();
       html += `<p>${line}</p>`;
     }
   }
   closeList();
-  closeQuote(); // NEW
+  closeQuote();
 
   return html;
 }
 
+// --------------------------------------------------------------
+// Loading state — the send button doubles as a stop button while a
+// request is in flight, with a spinning ring drawn by CSS (see
+// #sendBtn.loading in style.css).
+// --------------------------------------------------------------
 function setLoading(isLoading) {
-  sendBtn.disabled = isLoading;
   userInput.disabled = isLoading;
+  sendBtn.classList.toggle("loading", isLoading);
+  sendBtn.textContent = isLoading ? "■" : "↑";
+  sendBtn.setAttribute("aria-label", isLoading ? "Stop response" : "Send");
 }
 
 function autoGrow() {
-  requestAnimationFrame(() => {
-    userInput.style.height = "auto";
-    userInput.style.height = userInput.scrollHeight + "px";
-  });
+  userInput.style.height = "auto";
+  void userInput.offsetHeight; // forces a reflow so scrollHeight isn't stale on iOS Safari
+  const maxHeight = window.innerHeight * 0.4;
+  userInput.style.height = Math.min(userInput.scrollHeight, maxHeight) + "px";
 }
 
 function getActiveSession() {

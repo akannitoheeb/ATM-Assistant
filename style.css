@@ -49,16 +49,11 @@ body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  /* extra bottom padding respects the iPhone home-indicator / Safari toolbar
-     so "Log out" never sits underneath it */
   padding: 16px 12px calc(16px + env(safe-area-inset-bottom)) 12px;
   transition: width 0.18s ease, padding 0.18s ease, border-color 0.18s ease;
   overflow: hidden;
 }
 
-/* Desktop collapsed state — width collapses to 0 instead of sliding
-   off-canvas, since on desktop there's no backdrop overlay covering
-   the rest of the app. Content is still in the DOM, just clipped. */
 .sidebar.collapsed {
   width: 0;
   padding-left: 0;
@@ -68,7 +63,7 @@ body {
 
 .sidebar-top {
   flex-shrink: 0;
-  width: 216px; /* matches sidebar inner width so content doesn't reflow while collapsing */
+  width: 216px;
 }
 
 .chat-history {
@@ -599,7 +594,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-  
+
 .logout-link {
   background: transparent;
   border: none;
@@ -1257,9 +1252,6 @@ body {
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
-  /* Lets the browser handle scroll momentum independently of any
-     script-driven scrollTop writes happening elsewhere on the page —
-     part of the "scroll up while typing" fix. */
   overscroll-behavior: contain;
 }
 
@@ -1533,8 +1525,7 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   border-color: var(--gold);
 }
 
-/* ---- "+" tools button + labeled popup menu (replaces the old
-   unlabeled icon-only buttons) ---- */
+/* ---- "+" tools button + labeled popup menu ---- */
 .tools-btn {
   flex-shrink: 0;
   width: 30px;
@@ -1658,26 +1649,7 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   margin: 4px 2px;
 }
 
-.tools-popup-item.locked {
-  opacity: 0.55;
-}
-
-.tools-popup-item.locked::after {
-  content: "PRO";
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--gold);
-  border: 1px solid var(--gold);
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-left: 6px;
-}
-
-/* Length stepper shown under "Sequence mode" once it's active — three
-   equal-width pill buttons, same tap-target sizing philosophy as the
-   rest of the popup. Lives inside .tools-popup, so it inherits the
-   same width and gets hidden/shown via the shared .hidden utility. */
+/* Length stepper shown under "Sequence mode" once it's active */
 .sequence-length-row {
   display: flex;
   gap: 4px;
@@ -2031,8 +2003,6 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
 }
 
 /* ===================== Sequence card ===================== */
-/* Same outer shell as .campaign-card (reused, not duplicated) — this
-   just adds the per-email collapsible sections on top. */
 .sequence-card {
   max-width: 520px;
 }
@@ -2051,7 +2021,7 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
 }
 
 .sequence-email + .sequence-email {
-  margin-top: -2px; /* the gap: 14px on .campaign-card already spaces these; trims the double-gap look */
+  margin-top: -2px;
 }
 
 .sequence-email-summary {
@@ -2062,7 +2032,7 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   cursor: pointer;
   font-size: 13.5px;
   color: var(--text);
-  list-style: none; /* hides the default marker so the badge reads first */
+  list-style: none;
   background: var(--bg-main);
   transition: background 0.15s ease;
 }
@@ -2170,6 +2140,7 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   font-family: var(--font-body);
   font-size: 15px;
   max-height: 40vh;
+  overflow-y: auto;
   padding: 6px 0;
 }
 
@@ -2182,6 +2153,7 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
 }
 
 #sendBtn {
+  position: relative;
   flex-shrink: 0;
   width: 34px;
   height: 34px;
@@ -2206,6 +2178,29 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
 #sendBtn:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
+}
+
+/* Send button doubles as a stop button while a reply is in flight —
+   still clickable (setLoading only disables the textarea, not this
+   button), with a spinning ring drawn around it. */
+#sendBtn.loading {
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+#sendBtn.loading::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--gold);
+  animation: sendSpin 0.8s linear infinite;
+}
+
+@keyframes sendSpin {
+  to { transform: rotate(360deg); }
 }
 
 .mic-btn {
@@ -2249,10 +2244,6 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
 }
 
 /* ===================== Sidebar toggle buttons ===================== */
-/* Two separate elements that are structurally never visible at once:
-   sidebarCloseBtn lives inside the sidebar (disappears when it does),
-   sidebarOpenBtn is fixed outside it and JS shows/hides it opposite
-   to the sidebar's state. Shared base look, different positioning. */
 .sidebar-toggle-btn {
   display: flex;
   align-items: center;
@@ -2273,12 +2264,10 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   color: var(--gold);
 }
 
-/* Sits inline at the start of the brand row, inside the sidebar */
 .sidebar-close-btn {
   margin-right: 2px;
 }
 
-/* Fixed in the corner, outside the sidebar entirely */
 .sidebar-open-btn {
   position: fixed;
   top: 16px;
@@ -2313,9 +2302,6 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
     transform: translateX(0);
   }
 
-  /* Width/padding collapse rules only make sense on desktop; on
-     mobile the sidebar is always full off-canvas width and slides
-     via transform instead. */
   .sidebar.collapsed {
     width: 78vw;
     max-width: 280px;
@@ -2332,7 +2318,6 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
     min-width: 210px;
   }
 
-  /* Dark backdrop behind the open sidebar — tapping it closes the menu */
   .sidebar-backdrop {
     display: block;
     position: fixed;
@@ -2345,7 +2330,6 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
     display: none;
   }
 
-  /* Respect the iPhone notch/status bar for the floating open button */
   .sidebar-open-btn {
     top: calc(14px + env(safe-area-inset-top));
     left: 14px;
@@ -2367,10 +2351,9 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
     margin-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 
-  /* Bigger tap targets throughout on touch screens */
   .history-item { padding: 10px; }
   .history-item-menu {
-    opacity: 1; /* always visible on mobile — no hover state to reveal it */
+    opacity: 1;
     font-size: 18px;
     padding: 6px 10px;
   }
@@ -2386,6 +2369,7 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
 
 .guest-block {
   padding: 2px 8px 4px 8px;
+  position: relative; /* anchors #guestPopup */
 }
 
 .signup-prompt-btn {
@@ -2403,11 +2387,6 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
 
 .signup-prompt-btn:hover {
   background: var(--gold-deep);
-}
-
-.guest-block {
-  padding: 2px 8px 4px 8px;
-  position: relative; /* anchors #guestPopup */
 }
 
 /* Login gate is now a modal instead of a full-screen takeover */
