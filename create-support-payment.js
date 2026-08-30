@@ -55,6 +55,13 @@ module.exports = async function (req, res) {
 
   const tx_ref = `atm-support-${user ? user.id : "guest"}-${Date.now()}`;
 
+  // Flutterwave's payload validator expects meta values to be strings —
+  // sending `user_id: null` for guests was tripping a generic
+  // "string did not match the expected pattern" rejection. Only add
+  // user_id when we actually have one.
+  const meta = { type: "support" };
+  if (user) meta.user_id = user.id;
+
   try {
     const flwResponse = await fetch("https://api.flutterwave.com/v3/payments", {
       method: "POST",
@@ -64,7 +71,7 @@ module.exports = async function (req, res) {
       },
       body: JSON.stringify({
         tx_ref,
-        amount: String(amount),
+        amount: String(Math.round(Number(amount))),
         currency,
         redirect_url: "https://assistant.toheebakanni.name.ng/?supported=1",
         customer: { email: user ? user.email : "guest@toheebakanni.name.ng" },
@@ -72,7 +79,7 @@ module.exports = async function (req, res) {
           title: "Support ATM Assistant",
           description: "One-time support payment — thank you!"
         },
-        meta: { user_id: user ? user.id : null, type: "support" }
+        meta
       })
     });
 
