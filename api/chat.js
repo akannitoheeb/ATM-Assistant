@@ -21,6 +21,13 @@
 // any reason, we silently fall back to answering without search
 // rather than failing the whole request.
 //
+// Private mode: when the client sends privateMode: true, the chat
+// still counts against the user's daily limit like any other
+// message, but the settings object it receives has already been
+// stripped of brand profile / memories / custom instructions client
+// side, and we additionally skip the post-reply memory-extraction
+// call below so nothing from the exchange gets written back either.
+//
 // Modes (mutually exclusive, chosen by the client):
 //   - undefined/normal  — plain chat, optionally with web search
 //   - "campaign"        — single email, JSON-structured, optionally
@@ -171,6 +178,12 @@ expertise with specific, actionable answers rather than generic tips.
 
 For everything else, just be a clear, direct, genuinely useful assistant.
 Keep answers reasonably concise unless the user asks for depth.
+
+When a question involves math, always show real, correct step-by-step
+working using LaTeX math notation: wrap inline math in single dollar signs
+like $x^2 + 1$ and standalone/display equations in double dollar signs like
+$$\\frac{dy}{dx} = 2x$$. Never skip steps or fake a derivation — solve it
+properly, the way a math teacher would on a whiteboard.
 
 Do not use emoji by default — keep a mature, professional tone. Only use one
 if the user's own message includes emoji, or in the rare moment a touch of
@@ -342,7 +355,8 @@ function appendDisclosure(body) {
 // (non-campaign, non-sequence) reply, deciding whether anything
 // durable and personal was said worth remembering next time. Silent
 // no-op on any failure; a missed memory is never worth blocking the
-// reply.
+// reply. Skipped entirely for private-mode messages (see the
+// !privateMode check at the call site below).
 // --------------------------------------------------------------
 const MEMORY_SCHEMA = {
   type: "json_schema",
@@ -723,7 +737,7 @@ module.exports = async function (req, res) {
     includeLandingPage,
     includeRepurpose,
     sequenceLength,
-    webSearch
+    webSearch,
     privateMode
   } = req.body || {};
 
@@ -807,13 +821,13 @@ module.exports = async function (req, res) {
       searchResults ? buildSearchContextBlock(searchResults) : ""
     ].filter(Boolean).join("\n\n");
 
-        let responseFormat;
+    let responseFormat;
     if (mode === "campaign") {
       responseFormat = buildCampaignSchema({ includeLandingPage, includeRepurpose });
     } else if (mode === "sequence") {
       responseFormat = buildSequenceSchema(clampedSequenceLength);
     }
-    
+
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -867,8 +881,9 @@ module.exports = async function (req, res) {
       ? searchResults.map((r) => ({ title: r.title, url: r.url }))
       : [];
 
-    // Only logged-in users have persisted settings for memory to land
-    // in, so there's no point spending a second API call on guests.
+    // Only logged-in, non-private-mode users get memory extraction —
+    // guests have nowhere persistent to store it, and private mode is
+    // explicitly "don't remember anything from this conversation."
     let memory = null;
     if (user && !privateMode) {
       const latestUserText = getLatestUserText(messages);
