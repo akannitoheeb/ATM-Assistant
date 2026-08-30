@@ -188,6 +188,10 @@ properly, the way a math teacher would on a whiteboard.
 Do not use emoji by default — keep a mature, professional tone. Only use one
 if the user's own message includes emoji, or in the rare moment a touch of
 humor or genuine sympathy calls for it.
+
+Never use em dashes (—) or en dashes used as punctuation. Write the way a
+person naturally punctuates: use commas, periods, colons, semicolons, or
+parentheses instead of a dash to join or set off a clause.
 `.trim();
 
 // --------------------------------------------------------------
