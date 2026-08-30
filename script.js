@@ -2653,11 +2653,27 @@ function renderMarkdown(text) {
     const line = lines[i];
 
     if (line.trim().startsWith("|") && isTableSeparatorLine(lines[i + 1] || "")) {
-      closeList();
-      closeQuote(); // NEW
-      // ...unchanged table logic...
-      continue;
-    }
+  closeList();
+  closeQuote();
+
+  const headerCells = splitTableCells(line);
+  html += "<table><thead><tr>";
+  headerCells.forEach(cell => { html += `<th>${cell}</th>`; });
+  html += "</tr></thead><tbody>";
+
+  i += 2; // skip the header row and the |---|---| separator row
+  while (i < lines.length && lines[i].trim().startsWith("|")) {
+    const rowCells = splitTableCells(lines[i]);
+    html += "<tr>";
+    rowCells.forEach(cell => { html += `<td>${cell}</td>`; });
+    html += "</tr>";
+    i++;
+  }
+  i--; // back up one, since the for-loop's own i++ will advance past it
+
+  html += "</tbody></table>";
+  continue;
+}
 
     const headingMatch = line.match(/^\s*(#{1,4})\s+(.*)/);
     const quoteMatch = line.match(/^\s*&gt;\s?(.*)/); // NEW — note: matches &gt; since escaping already ran
