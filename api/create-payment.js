@@ -72,7 +72,7 @@ module.exports = async function (req, res) {
         redirect_url: "https://assistant.toheebakanni.name.ng/?upgraded=1",
         customer: { email: user.email },
         customizations: {
-          title: "ATM Assistant Pro",
+          title: "Beeto Pro",
           description: "Monthly subscription"
         },
         meta: { user_id: user.id }
