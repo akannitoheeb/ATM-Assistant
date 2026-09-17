@@ -1,6 +1,6 @@
 {
-  "name": "ATM Assistant",
-  "short_name": "ATM",
+  "name": "Beeto",
+  "short_name": "Beeto",
   "icons": [
     { "src": "/atm-app-icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/atm-app-icon-512.png", "sizes": "512x512", "type": "image/png" }
