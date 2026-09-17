@@ -1,5 +1,5 @@
 // ============================================================
-// ATM Assistant — Stage 4 (guest mode + accounts)
+// Beeto — Stage 4 (guest mode + accounts)
 //
 // Chat is visible immediately, even before logging in. Guests get
 // 1 free message per day (tracked by IP, on the server). Once
@@ -417,7 +417,7 @@ toolsCampaignItem.addEventListener("click", () => {
   }
   userInput.placeholder = campaignMode
     ? "Describe the campaign, audience, goal, offer…"
-    : "Message ATM Assistant…";
+    : "Message Beeto…";
   renderToolsPopupState();
 });
 
@@ -458,7 +458,7 @@ toolsSequenceItem.addEventListener("click", () => {
   }
   userInput.placeholder = sequenceMode
     ? "Describe the sequence, audience, goal, and the arc across emails…"
-    : "Message ATM Assistant…";
+    : "Message Beeto…";
   renderToolsPopupState();
 });
 
@@ -502,7 +502,7 @@ function resetCampaignMode() {
   includeRepurpose = false;
   sequenceMode = false;
   sequenceLength = 3;
-  userInput.placeholder = "Message ATM Assistant…";
+  userInput.placeholder = "Message Beeto…";
   renderToolsPopupState();
 }
 
@@ -699,7 +699,7 @@ memoryInput.addEventListener("keydown", (event) => {
 });
 
 clearMemoryBtn.addEventListener("click", () => {
-  if (!confirm("Forget everything ATM Assistant remembers about you?")) return;
+  if (!confirm("Forget everything Beeto remembers about you?")) return;
   settings.memories = [];
   saveUserData();
   renderMemoryList();
