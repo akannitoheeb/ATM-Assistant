@@ -1481,6 +1481,28 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   border-color: var(--gold);
 }
 
+.suggestions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.suggestion-chip {
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.suggestion-chip:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
 /* Copy / action row under assistant messages */
 .message-actions {
   display: flex;
