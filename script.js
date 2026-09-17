@@ -1854,8 +1854,8 @@ async function handleSend(event) {
       saveUserData();
       renderActiveChat();
     } else {
-      session.messages.push({ role: "assistant", content: result.reply, sources: result.sources });
-
+            session.messages.push({ role: "assistant", content: result.reply, sources: result.sources, suggestions: result.suggestions });
+            
       if (result.memory) {
         settings.memories = settings.memories || [];
         const FREE_MEMORY_CAP = 10;
@@ -1964,7 +1964,7 @@ async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, sign
   }
 
   if (!data.reply) throw new Error("No text returned from the API.");
-  return { reply: data.reply.trim(), sources: data.sources || [], memory: data.memory || null };
+    return { reply: data.reply.trim(), sources: data.sources || [], memory: data.memory || null, suggestions: Array.isArray(data.suggestions) ? data.suggestions : [] };
 }
 
 // --------------------------------------------------------------
@@ -2094,7 +2094,7 @@ function renderActiveChat(options = {}) {
     const role = msg.role === "user" ? "user" : "assistant";
     const isLast = index === session.messages.length - 1;
     const shouldType = Boolean(options.typeLast) && isLast && role === "assistant";
-    addMessageToDOM(msg, role, shouldType);
+    addMessageToDOM(msg, role, shouldType, isLast);
   });
 
   // Always jump to bottom the first time a chat is opened / re-rendered
@@ -2103,9 +2103,10 @@ function renderActiveChat(options = {}) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-function addMessageToDOM(msg, kind, animate = false) {
+function addMessageToDOM(msg, kind, animate = false, isLast = false) {
   const content = msg.content;
   const sources = msg.sources || [];
+  const suggestions = msg.suggestions || [];
   const hasOwnDisplayText = kind === "user" && Array.isArray(msg.attachments);
 
   const textPart = hasOwnDisplayText
@@ -2157,6 +2158,9 @@ function addMessageToDOM(msg, kind, animate = false) {
 
   if (kind === "assistant" && sources && sources.length > 0) {
     body.appendChild(buildSourcesRow(sources));
+  }
+  if (kind === "assistant" && isLast && suggestions.length > 0 && !isSending) {
+    body.appendChild(buildSuggestionsRow(suggestions));
   }
 
   if (kind === "assistant" && textPart) {
@@ -2221,6 +2225,28 @@ function buildSourcesRow(sources) {
     link.textContent = displayText;
 
     row.appendChild(link);
+  });
+
+  return row;
+}
+
+// Tappable follow-up suggestions under the most recent assistant reply,
+// the same idea as ChatGPT/Claude's suggestion chips. Only shown on the
+// last message so old suggestions don't linger once the chat has moved on.
+function buildSuggestionsRow(suggestions) {
+  const row = document.createElement("div");
+  row.className = "suggestions-row";
+
+  suggestions.forEach((text) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "suggestion-chip";
+    chip.textContent = text;
+    chip.addEventListener("click", () => {
+      userInput.value = text;
+      chatForm.requestSubmit();
+    });
+    row.appendChild(chip);
   });
 
   return row;
