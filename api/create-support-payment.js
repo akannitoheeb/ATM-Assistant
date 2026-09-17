@@ -53,7 +53,7 @@ module.exports = async function (req, res) {
     return res.status(500).json({ error: "Server is missing FLW_SECRET_KEY." });
   }
 
-  const tx_ref = `atm-support-${user ? user.id : "guest"}-${Date.now()}`;
+  const tx_ref = `beeto-support-${user ? user.id : "guest"}-${Date.now()}`;
 
   // Flutterwave's payload validator expects meta values to be strings —
   // sending `user_id: null` for guests was tripping a generic
