@@ -372,50 +372,97 @@ function appendDisclosure(body) {
 }
 
 // --------------------------------------------------------------
-// Memory extraction — a small second Groq call after each normal
-// (non-campaign, non-sequence) reply, deciding whether anything
-// durable and personal was said worth remembering next time. Silent
-// no-op on any failure; a missed memory is never worth blocking the
-// reply. Skipped entirely for private-mode messages (see the
-// !privateMode check at the call site below).
+// Post-reply extras — a small second Groq call after each normal
+// (non-campaign, non-sequence) reply. Does two jobs in one call: (1)
+// decides whether anything durable/personal is worth remembering, the
+// same as before, and (2) writes 3 suggested follow-up messages, the
+// same idea as ChatGPT/Claude's suggestion chips. Silent no-op on any
+// failure; a missed memory or missed suggestions are never worth
+// blocking the reply.
 // --------------------------------------------------------------
-const MEMORY_SCHEMA = {
+const POST_REPLY_SCHEMA = {
   type: "json_schema",
   json_schema: {
-    name: "memory_extraction",
+    name: "post_reply_extras",
     strict: true,
     schema: {
       type: "object",
       properties: {
         should_remember: { type: "boolean" },
-        fact: { type: "string" }
+        fact: { type: "string" },
+        suggestions: {
+          type: "array",
+          items: { type: "string" }
+        }
       },
-      required: ["should_remember", "fact"],
+      required: ["should_remember", "fact", "suggestions"],
       additionalProperties: false
     }
   }
 };
 
-function buildMemoryInstruction(existingMemories) {
+function buildPostReplyInstruction(existingMemories) {
   return `
-You extract durable, personal facts worth remembering about a user from a
-single chat exchange — the same idea as ChatGPT or Claude's memory feature.
+You do two small jobs after a chat exchange, the same idea as ChatGPT or
+Claude:
 
-Set should_remember to true only for things like: their business/role,
-standing preferences, or facts they'll likely want recalled in a future,
-unrelated conversation. Do NOT remember one-off questions, small talk, or
-anything already in the existing memories list below.
+1. MEMORY: decide if anything durable and personal about the user was
+said, worth recalling in a future, unrelated conversation (their
+business/role, standing preferences, etc). Do NOT remember one-off
+questions, small talk, or anything already in the existing memories list
+below. Set should_remember to true only when it's genuinely worth
+keeping; if true, fact must be ONE short sentence, third person (e.g.
+"Runs a skincare brand called Glow" not "I run a skincare brand").
 
-If should_remember is true, fact must be ONE short sentence, third person
-(e.g. "Runs a skincare brand called Glow" not "I run a skincare brand").
+2. SUGGESTIONS: write exactly 3 short follow-up messages the user might
+realistically send next, based specifically on what was just discussed.
+Write them in the user's own voice, first person, as if the user typed
+them (e.g. "Make the subject line punchier", not "Ask for a punchier
+subject line"). Keep each under 8 words. Never suggest something generic
+like "Tell me more, ground every suggestion in the actual reply above.
 
 Existing memories (never duplicate these):
 ${existingMemories.length > 0 ? existingMemories.map((m) => `- ${m}`).join("\n") : "(none yet)"}
 `.trim();
 }
 
-async function extractMemory(apiKey, userText, assistantText, existingMemories) {
+async function extractPostReplyExtras(apiKey, userText, assistantText, existingMemories) {
   if (!userText || !assistantText) return null;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: TEXT_MODEL,
+        messages: [
+          { role: "system", content: buildPostReplyInstruction(existingMemories) },
+          { role: "user", content: `User said: ${userText}\n\nAssistant replied: ${assistantText}` }
+        ],
+        response_format: POST_REPLY_SCHEMA,
+        reasoning_format: "hidden"
+      })
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content;
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return {
+      memory: parsed.should_remember && parsed.fact && parsed.fact.trim() ? parsed.fact.trim() : null,
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3).filter(Boolean) : []
+    };
+  } catch (error) {
+    console.error("Post-reply extraction failed:", error.message);
+    return null;
+  }
+}
 
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -902,18 +949,19 @@ module.exports = async function (req, res) {
       ? searchResults.map((r) => ({ title: r.title, url: r.url }))
       : [];
 
-    // Only logged-in, non-private-mode users get memory extraction —
-    // guests have nowhere persistent to store it, and private mode is
-    // explicitly "don't remember anything from this conversation."
-    let memory = null;
-    if (user && !privateMode) {
-      const latestUserText = getLatestUserText(messages);
-      const existingMemories = (settings?.memories || []).map((m) => m.text);
-      memory = await extractMemory(apiKey, latestUserText, reply, existingMemories);
-    }
+        // Everyone gets suggestions (guests included); only logged-in,
+    // non-private-mode users get memory extraction — guests have
+    // nowhere persistent to store it, and private mode is explicitly
+    // "don't remember anything from this conversation."
+    const latestUserText = getLatestUserText(messages);
+    const existingMemories = (settings?.memories || []).map((m) => m.text);
+    const extras = await extractPostReplyExtras(apiKey, latestUserText, reply, existingMemories);
 
-    return res.status(200).json({ reply, sources, memory });
+    const memory = (user && !privateMode) ? extras?.memory ?? null : null;
+    const suggestions = extras?.suggestions ?? [];
 
+    return res.status(200).json({ reply, sources, memory, suggestions });
+    
   } catch (error) {
     return res.status(500).json({ error: "Server error: " + error.message });
   }
