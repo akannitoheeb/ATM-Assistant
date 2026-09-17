@@ -55,7 +55,7 @@ module.exports = async function (req, res) {
     return res.status(500).json({ error: "Server is missing FLW_SECRET_KEY." });
   }
 
-  const tx_ref = `atm-pro-${user.id}-${Date.now()}`;
+  const tx_ref = `beeto-pro-${user.id}-${Date.now()}`;
 
   try {
     const flwResponse = await fetch("https://api.flutterwave.com/v3/payments", {
