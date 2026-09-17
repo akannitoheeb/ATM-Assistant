@@ -39,7 +39,7 @@
 const TEXT_MODEL = "openai/gpt-oss-120b";
 const VISION_MODEL = "qwen/qwen3.6-27b";
 
-const ALLOWED_ORIGIN = "https://assistant.toheebakanni.name.ng";
+const ALLOWED_ORIGIN = "https://beeto.toheebakanni.name.ng";
 const MAX_GUEST_MESSAGE_CHARS = 4000;
 const GLOBAL_GUEST_DAILY_CAP = 300;
 const NORMAL_MESSAGE_WEIGHT = 1;
@@ -194,9 +194,13 @@ person naturally punctuates: use commas, periods, colons, semicolons, or
 parentheses instead of a dash to join or set off a clause.
 
 About yourself: you are Beeto, built by Toheeb Akanni (his brand is ATM),
-live at assistant.toheebakanni.name.ng. If asked what you are, what plans
+live at beeto.toheebakanni.name.ng. If asked what you are, what plans
 exist, or what's included in each plan, answer directly and accurately
 using the facts below. Never invent a feature you don't actually have.
+
+If you used the send_email tool during this conversation, you may confirm
+what was sent, but never claim to have sent an email if the tool was not
+actually called and did not succeed.
 
 Free plan: 25 messages a day, normal chat with optional web search, voice
 input and read-aloud, single-email campaign mode, one brand profile,
@@ -372,6 +376,82 @@ function appendDisclosure(body) {
 }
 
 // --------------------------------------------------------------
+// Email tool — lets Beeto actually send an email on the user's
+// behalf via Brevo's transactional email API, instead of only ever
+// drafting text for the user to copy/paste themselves.
+//
+// Gated to logged-in users only (checked at call time in the
+// handler) — guests can't trigger outbound email, since that's an
+// abuse vector (arbitrary email sending from an anonymous visitor).
+// Requires a BREVO_API_KEY env var. BREVO_SENDER_EMAIL /
+// BREVO_SENDER_NAME are optional overrides for the "from" address;
+// they default to Toheeb's own verified sender below.
+// --------------------------------------------------------------
+const EMAIL_TOOL = {
+  type: "function",
+  function: {
+    name: "send_email",
+    description: "Send an email to a recipient via Brevo. Use this when the user explicitly asks you to send, email, or notify someone — not for drafting email copy they'll send themselves (that's normal chat, not this tool).",
+    parameters: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "Recipient email address" },
+        subject: { type: "string", description: "Email subject line" },
+        body: { type: "string", description: "Email body content, plain text (line breaks preserved)" }
+      },
+      required: ["to", "subject", "body"],
+      additionalProperties: false
+    }
+  }
+};
+
+const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function sendBrevoEmail({ to, subject, body }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    return { ok: false, error: "Email sending isn't configured on the server (missing BREVO_API_KEY)." };
+  }
+  if (!to || !EMAIL_ADDRESS_PATTERN.test(to)) {
+    return { ok: false, error: `"${to}" doesn't look like a valid email address.` };
+  }
+  if (!subject || !body) {
+    return { ok: false, error: "Missing subject or body." };
+  }
+
+  const senderEmail = process.env.BREVO_SENDER_EMAIL || "toheeb@toheebakanni.name.ng";
+  const senderName = process.env.BREVO_SENDER_NAME || "Beeto";
+
+  try {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": apiKey,
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify({
+        sender: { email: senderEmail, name: senderName },
+        to: [{ email: to }],
+        subject,
+        htmlContent: `<div style="white-space:pre-wrap;font-family:sans-serif;">${body.replace(/</g, "&lt;")}</div>`
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Brevo send error:", response.status, errText);
+      return { ok: false, error: `Brevo rejected the send (status ${response.status}).` };
+    }
+
+    return { ok: true, to, subject };
+  } catch (error) {
+    console.error("Brevo send failed:", error.message);
+    return { ok: false, error: "Network error while sending the email." };
+  }
+}
+
+// --------------------------------------------------------------
 // Post-reply extras — a small second Groq call after each normal
 // (non-campaign, non-sequence) reply. Does two jobs in one call: (1)
 // decides whether anything durable/personal is worth remembering, the
@@ -460,40 +540,6 @@ async function extractPostReplyExtras(apiKey, userText, assistantText, existingM
     };
   } catch (error) {
     console.error("Post-reply extraction failed:", error.message);
-    return null;
-  }
-}
-
-  try {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: TEXT_MODEL,
-        messages: [
-          { role: "system", content: buildMemoryInstruction(existingMemories) },
-          { role: "user", content: `User said: ${userText}\n\nAssistant replied: ${assistantText}` }
-        ],
-        response_format: MEMORY_SCHEMA,
-        reasoning_format: "hidden"
-      })
-    });
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    const raw = data.choices?.[0]?.message?.content;
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-    return parsed.should_remember && parsed.fact && parsed.fact.trim()
-      ? parsed.fact.trim()
-      : null;
-  } catch (error) {
-    console.error("Memory extraction failed:", error.message);
     return null;
   }
 }
@@ -896,6 +942,17 @@ module.exports = async function (req, res) {
       responseFormat = buildSequenceSchema(clampedSequenceLength);
     }
 
+    // Tool use (send_email) is only offered in normal chat mode, and
+    // only to logged-in users — guests never get tool access, since
+    // an anonymous visitor triggering real outbound email is an abuse
+    // vector we don't want to open up.
+    const toolsForThisRequest = (!isStructuredMode && user) ? [EMAIL_TOOL] : undefined;
+
+    const conversationMessages = [
+      { role: "system", content: systemContent },
+      ...messages
+    ];
+
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -904,20 +961,81 @@ module.exports = async function (req, res) {
       },
       body: JSON.stringify({
         model: usingTextModel ? TEXT_MODEL : VISION_MODEL,
-        messages: [
-          { role: "system", content: systemContent },
-          ...messages
-        ],
+        messages: conversationMessages,
         ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
-        ...(responseFormat ? { response_format: responseFormat } : {})
+        ...(responseFormat ? { response_format: responseFormat } : {}),
+        ...(toolsForThisRequest ? { tools: toolsForThisRequest, tool_choice: "auto" } : {})
       })
     });
 
-    const data = await groqResponse.json();
+    let data = await groqResponse.json();
 
     if (!groqResponse.ok) {
       console.error("Groq API error:", groqResponse.status, JSON.stringify(data));
       return res.status(groqResponse.status).json({ error: data.error?.message || "Groq API error" });
+    }
+
+    // --------------------------------------------------------------
+    // Tool-call handling — only relevant in normal mode, only when the
+    // model actually asked to call something. Execute each tool call
+    // for real, feed the result back, then ask Groq once more (no
+    // tools this time) for the natural-language reply that reports
+    // what happened.
+    // --------------------------------------------------------------
+    let toolResultsForClient = [];
+    let assistantMessage = data.choices?.[0]?.message;
+
+    if (assistantMessage?.tool_calls?.length) {
+      conversationMessages.push(assistantMessage);
+
+      for (const call of assistantMessage.tool_calls) {
+        if (call.function.name === "send_email") {
+          let args;
+          try {
+            args = JSON.parse(call.function.arguments);
+          } catch {
+            args = {};
+          }
+
+          const result = await sendBrevoEmail(args);
+          toolResultsForClient.push({ tool: "send_email", ...result, to: args.to, subject: args.subject });
+
+          conversationMessages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: JSON.stringify(result)
+          });
+        } else {
+          // Unknown tool name — shouldn't happen since we only ever
+          // offer EMAIL_TOOL, but fail closed rather than silently
+          // dropping the call.
+          conversationMessages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: JSON.stringify({ ok: false, error: "Unknown tool" })
+          });
+        }
+      }
+
+      const followUpResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: usingTextModel ? TEXT_MODEL : VISION_MODEL,
+          messages: conversationMessages,
+          ...(usingTextModel ? { reasoning_format: "hidden" } : {})
+        })
+      });
+
+      data = await followUpResponse.json();
+
+      if (!followUpResponse.ok) {
+        console.error("Groq API error (tool follow-up):", followUpResponse.status, JSON.stringify(data));
+        return res.status(followUpResponse.status).json({ error: data.error?.message || "Groq API error" });
+      }
     }
 
     const rawReply = data.choices?.[0]?.message?.content || "";
@@ -949,7 +1067,7 @@ module.exports = async function (req, res) {
       ? searchResults.map((r) => ({ title: r.title, url: r.url }))
       : [];
 
-        // Everyone gets suggestions (guests included); only logged-in,
+    // Everyone gets suggestions (guests included); only logged-in,
     // non-private-mode users get memory extraction — guests have
     // nowhere persistent to store it, and private mode is explicitly
     // "don't remember anything from this conversation."
@@ -960,8 +1078,8 @@ module.exports = async function (req, res) {
     const memory = (user && !privateMode) ? extras?.memory ?? null : null;
     const suggestions = extras?.suggestions ?? [];
 
-    return res.status(200).json({ reply, sources, memory, suggestions });
-    
+    return res.status(200).json({ reply, sources, memory, suggestions, toolResults: toolResultsForClient });
+
   } catch (error) {
     return res.status(500).json({ error: "Server error: " + error.message });
   }
