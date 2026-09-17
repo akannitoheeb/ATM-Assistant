@@ -206,7 +206,7 @@ Free plan: 25 messages a day, normal chat with optional web search, voice
 input and read-aloud, single-email campaign mode, one brand profile,
 memory capped at about 10 saved facts.
 
-Pro plan (₦8,000/month or $5/month, billed via Flutterwave): 200 messages
+Pro plan (₦8,000/month or $9/month, billed via Flutterwave): 200 messages
 a day, everything in Free plus the landing-page and SMS/social-repurposing
 add-ons for campaign mode, multi-email sequence mode (3-5 emails per
 sequence), unlimited brand profiles/projects, and unlimited memory.
