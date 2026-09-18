@@ -237,53 +237,85 @@ let pendingCommandStart = false;
 let wakeRecognition = null;
 let commandRecognition = null;
 let wakeToggleBtn = null;
-let voiceStatusEl = null;
+let voiceOrbEl = null;
+let voiceOrbCircle = null;
+let voiceStatusLabelEl = null;
+
+// Real-time mic level metering, kept separate from the two
+// SpeechRecognition instances below — SpeechRecognition never exposes
+// raw audio volume, so getting the audio-reactive size-pulsing the
+// orb needs (the actual thing that makes Siri/Gemini's orb feel
+// "alive," not just decorative) requires its own getUserMedia stream
+// run through a Web Audio AnalyserNode. This reuses the mic
+// permission already granted for speech recognition, so it doesn't
+// prompt the person a second time.
+let micStream = null;
+let micAudioContext = null;
+let micAnalyser = null;
+let micLevelRAF = null;
 
 if (SpeechRecognitionCtor) {
   const voiceStyleTag = document.createElement("style");
   voiceStyleTag.textContent = `
-    .voice-status-pill {
+    .voice-orb-wrap {
       position: fixed;
-      bottom: 96px;
+      bottom: 92px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(17,17,17,0.92);
-      color: #F5F1E8;
-      padding: 8px 16px;
-      border-radius: 999px;
-      font-size: 13px;
-      z-index: 500;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
+      z-index: 500;
       pointer-events: none;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
     }
-    .voice-status-pill.hidden { display: none; }
-    .voice-status-pill::before {
-      content: "";
-      width: 8px;
-      height: 8px;
+    .voice-orb-wrap.hidden { display: none; }
+    .voice-orb {
+      width: 56px;
+      height: 56px;
       border-radius: 50%;
-      background: #C9962E;
-      flex-shrink: 0;
+      background: radial-gradient(circle at 35% 30%, #F3D9A4, #C9962E 55%, #8a6416 100%);
+      box-shadow: 0 0 24px 6px rgba(201,150,46,0.55);
+      transform: scale(var(--orb-scale, 1));
+      transition: transform 70ms linear, background 300ms ease, box-shadow 300ms ease;
     }
-    .voice-status-pill[data-state="wake"]::before { background: #7DB88A; animation: voicePulse 1.6s infinite; }
-    .voice-status-pill[data-state="listening"]::before { background: #C9962E; animation: voicePulse 0.8s infinite; }
-    .voice-status-pill[data-state="thinking"]::before { background: #9C9284; animation: voicePulse 1s infinite; }
-    .voice-status-pill[data-state="speaking"]::before { background: #E0765A; animation: voicePulse 0.6s infinite; }
-    @keyframes voicePulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.7); opacity: 0.45; }
+    .voice-orb-wrap[data-state="wake"] .voice-orb {
+      background: radial-gradient(circle at 35% 30%, #cfeed9, #7DB88A 55%, #4c7a58 100%);
+      box-shadow: 0 0 20px 5px rgba(125,184,138,0.5);
+    }
+    .voice-orb-wrap[data-state="thinking"] .voice-orb {
+      background: conic-gradient(from 0deg, #C9962E, #E0765A, #7DB88A, #C9962E);
+      animation: voiceOrbSpin 1.1s linear infinite;
+      box-shadow: 0 0 20px 5px rgba(200,200,200,0.35);
+    }
+    .voice-orb-wrap[data-state="speaking"] .voice-orb {
+      background: radial-gradient(circle at 35% 30%, #f6c6b4, #E0765A 55%, #a5432c 100%);
+      animation: voiceOrbPulse 0.55s ease-in-out infinite;
+      box-shadow: 0 0 22px 6px rgba(224,118,90,0.5);
+    }
+    @keyframes voiceOrbSpin { to { transform: rotate(360deg) scale(var(--orb-scale, 1)); } }
+    @keyframes voiceOrbPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.18); }
+    }
+    .voice-status-label {
+      background: rgba(17,17,17,0.85);
+      color: #F5F1E8;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      white-space: nowrap;
     }
     #wakeToggleBtn.active { color: #C9962E; }
   `;
   document.head.appendChild(voiceStyleTag);
 
-  voiceStatusEl = document.createElement("div");
-  voiceStatusEl.id = "voiceStatusPill";
-  voiceStatusEl.className = "voice-status-pill hidden";
-  document.body.appendChild(voiceStatusEl);
+  voiceOrbEl = document.createElement("div");
+  voiceOrbEl.className = "voice-orb-wrap hidden";
+  voiceOrbEl.innerHTML = `<div class="voice-orb"></div><div class="voice-status-label"></div>`;
+  document.body.appendChild(voiceOrbEl);
+  voiceOrbCircle = voiceOrbEl.querySelector(".voice-orb");
+  voiceStatusLabelEl = voiceOrbEl.querySelector(".voice-status-label");
 
   wakeToggleBtn = document.createElement("button");
   wakeToggleBtn.type = "button";
@@ -308,7 +340,17 @@ if (SpeechRecognitionCtor) {
   };
 
   commandRecognition.onerror = (event) => {
-    console.error("Command recognition error:", event.error);
+    // Logged with a distinct prefix on purpose — if voice mode is
+    // still misbehaving, open the browser console and look for lines
+    // starting with "Beeto voice mode" to see exactly which stage and
+    // which native error code is actually firing.
+    console.error("Beeto voice mode — command recognition error:", event.error);
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      voiceModeEnabled = false;
+      updateVoiceModeUI();
+      setVoiceStatus("idle");
+      alert("Microphone access was blocked. Enable it under Settings > Safari > Microphone for this site.");
+    }
   };
 
   commandRecognition.onend = () => {
@@ -337,14 +379,24 @@ if (SpeechRecognitionCtor) {
   };
 
   wakeRecognition.onerror = (event) => {
-    // "no-speech" fires constantly in continuous mode — not a real
-    // error, just silence. Only a real permission problem should
-    // actually turn voice mode off.
+    console.error("Beeto voice mode — wake recognition error:", event.error);
+    // "no-speech" and "aborted" fire constantly and harmlessly in
+    // continuous mode — they just mean "nothing heard yet," not a
+    // real failure, so onend's own restart logic handles those.
+    // Only a genuine permission or hardware problem should actually
+    // turn voice mode off and say why.
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       voiceModeEnabled = false;
       updateVoiceModeUI();
       setVoiceStatus("idle");
+      stopMicLevelMeter();
       alert("Microphone access was blocked. Enable it under Settings > Safari > Microphone for this site.");
+    } else if (event.error === "audio-capture") {
+      voiceModeEnabled = false;
+      updateVoiceModeUI();
+      setVoiceStatus("idle");
+      stopMicLevelMeter();
+      alert("No microphone was found on this device.");
     }
   };
 
@@ -355,7 +407,7 @@ if (SpeechRecognitionCtor) {
       try {
         commandRecognition.start();
       } catch (error) {
-        console.error("Could not start command recognition:", error);
+        console.error("Beeto voice mode — could not start command recognition:", error);
         isListeningForCommand = false;
         if (voiceModeEnabled) {
           setVoiceStatus("wake");
@@ -369,7 +421,11 @@ if (SpeechRecognitionCtor) {
     // restart it automatically as long as voice mode is still on and
     // we're not mid-command or mid-speech.
     if (voiceModeEnabled && !isListeningForCommand) {
-      try { wakeRecognition.start(); } catch (error) {}
+      try {
+        wakeRecognition.start();
+      } catch (error) {
+        console.error("Beeto voice mode — could not restart wake recognition:", error);
+      }
     }
   };
 
@@ -379,7 +435,24 @@ if (SpeechRecognitionCtor) {
 
     if (voiceModeEnabled) {
       setVoiceStatus("wake");
-      try { wakeRecognition.start(); } catch (error) { console.error(error); }
+      startMicLevelMeter();
+      try {
+        wakeRecognition.start();
+      } catch (error) {
+        // This fires immediately (synchronously) if, for example, the
+        // browser genuinely has no SpeechRecognition support in this
+        // context despite the constructor existing, or mic permission
+        // was already denied at the OS level. Surfacing it directly
+        // instead of failing silently is the fastest way to tell
+        // "wake word doesn't work" apart from "wake word isn't even
+        // starting."
+        console.error("Beeto voice mode — could not start wake recognition:", error);
+        voiceModeEnabled = false;
+        updateVoiceModeUI();
+        setVoiceStatus("idle");
+        stopMicLevelMeter();
+        alert("Couldn't start voice mode: " + error.message);
+      }
     } else {
       setVoiceStatus("idle");
       try { wakeRecognition.stop(); } catch (error) {}
@@ -387,6 +460,7 @@ if (SpeechRecognitionCtor) {
       speechSynthesis.cancel();
       isListeningForCommand = false;
       pendingCommandStart = false;
+      stopMicLevelMeter();
     }
   });
 }
@@ -400,20 +474,82 @@ function updateVoiceModeUI() {
 }
 
 function setVoiceStatus(state) {
-  if (!voiceStatusEl) return;
+  if (!voiceOrbEl) return;
   if (state === "idle") {
-    voiceStatusEl.classList.add("hidden");
+    voiceOrbEl.classList.add("hidden");
     return;
   }
-  voiceStatusEl.classList.remove("hidden");
-  voiceStatusEl.dataset.state = state;
+  voiceOrbEl.classList.remove("hidden");
+  voiceOrbEl.dataset.state = state;
   const labels = {
     wake: 'Listening for "Hey Beeto"…',
     listening: "Listening…",
     thinking: "Thinking…",
     speaking: "Speaking…"
   };
-  voiceStatusEl.textContent = labels[state] || "";
+  if (voiceStatusLabelEl) voiceStatusLabelEl.textContent = labels[state] || "";
+}
+
+// --------------------------------------------------------------
+// Audio-reactive orb sizing — the part that actually makes it feel
+// like Siri/Gemini rather than a static icon: the orb visibly grows
+// and shrinks with how loud you're talking, in real time, while in
+// the "wake" (listening for the wake word) or "listening" (capturing
+// a command) states. During "thinking"/"speaking" this hands control
+// back to the CSS animations above instead, since nothing meaningful
+// is coming through the mic in those states.
+// --------------------------------------------------------------
+async function startMicLevelMeter() {
+  if (micStream) return; // already running
+
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = micAudioContext.createMediaStreamSource(micStream);
+    micAnalyser = micAudioContext.createAnalyser();
+    micAnalyser.fftSize = 256;
+    source.connect(micAnalyser);
+
+    const data = new Uint8Array(micAnalyser.frequencyBinCount);
+
+    const tick = () => {
+      if (!micAnalyser) return; // stopped
+      micAnalyser.getByteFrequencyData(data);
+      const avg = data.reduce((sum, v) => sum + v, 0) / data.length;
+
+      const state = voiceOrbEl?.dataset.state;
+      if (state === "wake" || state === "listening") {
+        const scale = 1 + Math.min(avg / 90, 1) * 0.5;
+        voiceOrbCircle.style.setProperty("--orb-scale", scale.toFixed(2));
+      } else {
+        voiceOrbCircle.style.setProperty("--orb-scale", "1");
+      }
+      micLevelRAF = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (error) {
+    // Non-fatal: voice mode still works through SpeechRecognition
+    // itself, it just won't have the audio-reactive sizing — the orb
+    // will show its state colour and the CSS pulse/spin animation
+    // instead. Most likely cause: mic permission blocked, or a
+    // browser/context that doesn't support getUserMedia here.
+    console.error("Beeto voice mode — mic level meter unavailable:", error);
+  }
+}
+
+function stopMicLevelMeter() {
+  if (micLevelRAF) cancelAnimationFrame(micLevelRAF);
+  micLevelRAF = null;
+  if (micStream) {
+    micStream.getTracks().forEach((t) => t.stop());
+    micStream = null;
+  }
+  if (micAudioContext) {
+    micAudioContext.close().catch(() => {});
+    micAudioContext = null;
+  }
+  micAnalyser = null;
+  if (voiceOrbCircle) voiceOrbCircle.style.setProperty("--orb-scale", "1");
 }
 
 const sidebar = document.getElementById("sidebar");
