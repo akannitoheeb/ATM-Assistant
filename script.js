@@ -156,6 +156,28 @@ function stopRecordingUI() {
 // --------------------------------------------------------------
 let currentTtsAudio = null; // the ElevenLabs <audio> currently playing, if any
 
+// The plain text Beeto is currently speaking aloud, if any — used to
+// tell a genuine interruption apart from the mic just picking up
+// Beeto's own voice through the speaker (a real risk without
+// headphones, since the Web Speech API gives no way to suppress that
+// from here). See looksLikeEcho() below, used by commandRecognition's
+// barge-in check.
+let currentlySpokenText = null;
+
+function looksLikeEcho(transcript) {
+  const heard = transcript.trim().toLowerCase();
+  if (!currentlySpokenText || heard.length < 3) return false;
+  // Not an exact-substring-only check — recognized speech (especially
+  // an early interim result) rarely lines up word-for-word with the
+  // source text, so this checks how much of what was heard actually
+  // shows up in what's being spoken, word by word.
+  const spoken = currentlySpokenText.toLowerCase();
+  const heardWords = heard.split(/\s+/).filter(w => w.length > 2);
+  if (heardWords.length === 0) return false;
+  const matchedWords = heardWords.filter(w => spoken.includes(w));
+  return matchedWords.length / heardWords.length > 0.6; // most of what it heard is also in what's playing
+}
+
 function stopAllSpeech() {
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   if (currentTtsAudio) {
@@ -163,11 +185,13 @@ function stopAllSpeech() {
     currentTtsAudio.currentTime = 0;
     currentTtsAudio = null;
   }
+  currentlySpokenText = null;
 }
 
 async function speakText(text, onDone) {
   stopAllSpeech();
   const plainText = text.replace(/[*_#`]/g, ""); // strip stray markdown before speaking
+  currentlySpokenText = plainText;
 
   try {
     const authHeaders = await getAuthHeaders();
@@ -187,6 +211,7 @@ async function speakText(text, onDone) {
     audio.onended = () => {
       URL.revokeObjectURL(url);
       if (currentTtsAudio === audio) currentTtsAudio = null;
+      currentlySpokenText = null;
       if (onDone) onDone();
     };
     audio.onerror = () => {
@@ -206,10 +231,12 @@ async function speakText(text, onDone) {
 
 function speakWithBrowserVoice(plainText, onDone) {
   if (!("speechSynthesis" in window)) {
+    currentlySpokenText = null;
     if (onDone) onDone();
     return;
   }
 
+  currentlySpokenText = plainText; // re-set here too, in case this was reached via the ElevenLabs error fallback above
   const utterance = new SpeechSynthesisUtterance(plainText);
 
   if (settings.voiceURI) {
@@ -217,8 +244,8 @@ function speakWithBrowserVoice(plainText, onDone) {
     if (chosenVoice) utterance.voice = chosenVoice;
   }
 
-  utterance.onend = () => { if (onDone) onDone(); };
-  utterance.onerror = () => { if (onDone) onDone(); };
+  utterance.onend = () => { currentlySpokenText = null; if (onDone) onDone(); };
+  utterance.onerror = () => { currentlySpokenText = null; if (onDone) onDone(); };
 
   speechSynthesis.speak(utterance);
 }
@@ -418,16 +445,25 @@ if (SpeechRecognitionCtor) {
   commandRecognition.onresult = (event) => {
     const result = event.results[event.results.length - 1];
     const transcript = result[0].transcript;
+    const isBeetoTalking = currentTtsAudio || ("speechSynthesis" in window && speechSynthesis.speaking);
 
-    // Barge-in: the moment ANY speech is detected — even a partial,
+    // Barge-in: the moment real speech is detected — even a partial,
     // not-yet-final interim result — if Beeto is currently talking,
     // cut it off right away. This is what makes interrupting feel
     // instant instead of waiting for a full sentence to be captured
-    // first. Note: without headphones, the mic can occasionally pick
-    // up Beeto's own voice through the speaker and misread it as you
-    // interrupting — the Web Speech API doesn't give us a way to
-    // fully suppress that from here.
-    if (currentTtsAudio || ("speechSynthesis" in window && speechSynthesis.speaking)) {
+    // first.
+    //
+    // Without headphones, the mic can pick up Beeto's own voice
+    // coming through the speaker and misread it as an interruption.
+    // The Web Speech API gives no way to suppress that at the source,
+    // so instead: check whether what was just heard actually matches
+    // what Beeto is currently saying (looksLikeEcho, above). If it
+    // does, treat it as the mic hearing itself and ignore it rather
+    // than cutting Beeto off over its own voice.
+    if (isBeetoTalking) {
+      if (looksLikeEcho(transcript)) {
+        return;
+      }
       stopAllSpeech();
       setVoiceStatus("listening");
     }
