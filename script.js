@@ -292,6 +292,8 @@ if ("speechSynthesis" in window) {
 let voiceModeEnabled = false; // "voice session" active — tap-to-start/stop, not a wake word
 
 let commandProducedResult = false; // tracks whether the current listening pass actually heard something
+let commandRecognitionActive = false; // tracks whether commandRecognition is currently running, so barge-in and the normal resume-after-speaking flow never both call .start() at once
+let startCommandListening = () => {}; // reassigned below once commandRecognition exists; declared here (rather than nested inside the if-block) so handleSend can safely call it regardless of block-scoping behaviour
 let commandRecognition = null;
 let wakeToggleBtn = null;
 let voiceOrbEl = null;
@@ -396,12 +398,43 @@ if (SpeechRecognitionCtor) {
   // reliable mode the original tap-to-talk mic button already used.
   commandRecognition = new SpeechRecognitionCtor();
   commandRecognition.continuous = false;
-  commandRecognition.interimResults = false;
+  commandRecognition.interimResults = true; // needed for barge-in: react the instant speech starts, not only once a full utterance is captured
   commandRecognition.lang = "en-GB";
 
+  // Centralizes starting commandRecognition so barge-in (started while
+  // Beeto is still speaking) and the normal "resume listening" calls
+  // elsewhere never both try to start it at once — Safari/Chrome both
+  // throw if .start() is called while a session is already running.
+  startCommandListening = function () {
+    if (commandRecognitionActive) return;
+    try {
+      commandRecognition.start();
+      commandRecognitionActive = true;
+    } catch (error) {
+      console.error("Beeto voice mode — could not start listening:", error);
+    }
+  };
+
   commandRecognition.onresult = (event) => {
+    const result = event.results[event.results.length - 1];
+    const transcript = result[0].transcript;
+
+    // Barge-in: the moment ANY speech is detected — even a partial,
+    // not-yet-final interim result — if Beeto is currently talking,
+    // cut it off right away. This is what makes interrupting feel
+    // instant instead of waiting for a full sentence to be captured
+    // first. Note: without headphones, the mic can occasionally pick
+    // up Beeto's own voice through the speaker and misread it as you
+    // interrupting — the Web Speech API doesn't give us a way to
+    // fully suppress that from here.
+    if (currentTtsAudio || ("speechSynthesis" in window && speechSynthesis.speaking)) {
+      stopAllSpeech();
+      setVoiceStatus("listening");
+    }
+
+    if (!result.isFinal) return; // wait for the complete utterance before sending
+
     commandProducedResult = true;
-    const transcript = event.results[0][0].transcript;
     userInput.value = transcript;
     autoGrow();
     chatForm.requestSubmit(); // auto-send — this is the "no tapping" part
@@ -413,6 +446,7 @@ if (SpeechRecognitionCtor) {
     // starting with "Beeto voice mode" to see exactly which native
     // error code is actually firing.
     console.error("Beeto voice mode — recognition error:", event.error);
+    commandRecognitionActive = false;
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       voiceModeEnabled = false;
       updateVoiceModeUI();
@@ -431,6 +465,8 @@ if (SpeechRecognitionCtor) {
   };
 
   commandRecognition.onend = () => {
+    commandRecognitionActive = false;
+
     if (commandProducedResult) {
       // A result came in, which already triggered chatForm.requestSubmit()
       // above — handleSend now owns the flow (thinking → speaking →
@@ -443,9 +479,10 @@ if (SpeechRecognitionCtor) {
     // Ended with nothing heard (silence, or a recoverable error) — if
     // the session is still on, just listen again instead of going
     // idle and forcing another tap.
+
     if (voiceModeEnabled) {
       try {
-        commandRecognition.start();
+        startCommandListening();
       } catch (error) {
         console.error("Beeto voice mode — could not restart listening:", error);
       }
@@ -498,6 +535,7 @@ if (SpeechRecognitionCtor) {
       commandProducedResult = false;
       try {
         commandRecognition.start();
+        commandRecognitionActive = true;
       } catch (error) {
         // Fires immediately (synchronously) if, for example, the
         // browser genuinely has no working speech recognition in this
@@ -516,6 +554,7 @@ if (SpeechRecognitionCtor) {
     } else {
       setVoiceStatus("idle");
       try { commandRecognition.stop(); } catch (error) {}
+      commandRecognitionActive = false;
       stopAllSpeech();
       commandProducedResult = false;
       stopMicLevelMeter();
@@ -2293,11 +2332,21 @@ async function handleSend(event) {
       if (voiceModeEnabled) {
         voiceWillRespond = true;
         setVoiceStatus("speaking");
+        // Start listening immediately, in parallel with playback —
+        // this is what makes barge-in possible. commandRecognition's
+        // own onresult handler (above) is what actually notices you've
+        // started talking and cuts Beeto off; this call just makes
+        // sure the mic is already live and ready the instant speaking
+        // starts, not only after it ends.
+        commandProducedResult = false;
+        startCommandListening();
         speakText(result.reply, () => {
           if (voiceModeEnabled) {
+            // If barge-in already cut this speech short, commandRecognition
+            // is very likely already running — startCommandListening()
+            // is a no-op in that case rather than throwing.
             setVoiceStatus("listening");
-            commandProducedResult = false;
-            try { commandRecognition.start(); } catch (error) {}
+            startCommandListening();
           } else {
             setVoiceStatus("idle");
           }
@@ -2334,13 +2383,12 @@ async function handleSend(event) {
     // Campaign/sequence replies, errors, and aborts never trigger
     // speakText() above, so nothing will resume listening on its own
     // in those cases — do it here instead. When a normal reply IS
-    // being spoken, speakText's own onDone callback handles the resume
-    // once it's actually finished, so skip it here to avoid restarting
-    // the mic while Beeto is still talking.
+    // being spoken, listening was already started above (that's what
+    // enables barge-in), so skip it here to avoid double-starting.
     if (voiceModeEnabled && !voiceWillRespond) {
       setVoiceStatus("listening");
       commandProducedResult = false;
-      try { commandRecognition.start(); } catch (error) {}
+      startCommandListening();
     }
   }
 }
@@ -3382,4 +3430,3 @@ function getActiveSession() {
 renderActiveChat();
 renderToolsPopupState();
 restoreDraft();
-
