@@ -97,7 +97,7 @@ if (SpeechRecognitionCtor) {
   recognition = new SpeechRecognitionCtor();
   recognition.continuous = false;
   recognition.interimResults = false;
-  recognition.lang = "en-US";
+  recognition.lang = "en-GB";
 
   recognition.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
@@ -397,7 +397,7 @@ if (SpeechRecognitionCtor) {
   commandRecognition = new SpeechRecognitionCtor();
   commandRecognition.continuous = false;
   commandRecognition.interimResults = false;
-  commandRecognition.lang = "en-US";
+  commandRecognition.lang = "en-GB";
 
   commandRecognition.onresult = (event) => {
     commandProducedResult = true;
