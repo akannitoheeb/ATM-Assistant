@@ -454,11 +454,45 @@ if (SpeechRecognitionCtor) {
     }
   };
 
+  // --------------------------------------------------------------
+  // Audio unlock — iOS Safari (and some Android browsers) only allow
+  // starting audio playback from directly within a user-gesture
+  // handler (a real tap). speakText() fires later, after a network
+  // round trip to Groq for a reply — by then, the original tap's
+  // "permission window" for starting audio may have already expired,
+  // which is exactly what produces "everything else works, but
+  // nothing plays out loud." Playing a near-silent sound and a
+  // near-silent speech utterance synchronously, right here inside the
+  // tap that turns voice mode on, unlocks audio playback for the rest
+  // of this page session, so the later async-triggered speakText()
+  // call is actually allowed to produce sound.
+  // --------------------------------------------------------------
+  function unlockAudioPlayback() {
+    try {
+      if ("speechSynthesis" in window) {
+        const warm = new SpeechSynthesisUtterance(" ");
+        warm.volume = 0;
+        speechSynthesis.speak(warm);
+      }
+    } catch (error) {}
+
+    try {
+      // A ~0.1s silent MP3, base64-encoded inline — just enough for
+      // the browser to register a real playback start inside this
+      // gesture, without anyone actually hearing anything.
+      const silentAudio = new Audio(
+        "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      );
+      silentAudio.play().catch(() => {});
+    } catch (error) {}
+  }
+
   wakeToggleBtn.addEventListener("click", () => {
     voiceModeEnabled = !voiceModeEnabled;
     updateVoiceModeUI();
 
     if (voiceModeEnabled) {
+      unlockAudioPlayback(); // must happen synchronously, right inside this tap — see comment below
       setVoiceStatus("listening");
       startMicLevelMeter();
       commandProducedResult = false;
