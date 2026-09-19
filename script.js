@@ -156,6 +156,36 @@ function stopRecordingUI() {
 // --------------------------------------------------------------
 let currentTtsAudio = null; // the ElevenLabs <audio> currently playing, if any
 
+// A single, reused <audio> element for all ElevenLabs playback, rather
+// than a fresh `new Audio()` each time. This matters specifically for
+// Safari/iOS: once one particular <audio> element has been played
+// inside a genuine user-gesture handler (even silently, see
+// primeTtsAudioElement below), that SAME element keeps permission to
+// play again later from async code (after a network request) for the
+// rest of the page session — but a brand-new Audio() object created
+// later does not inherit that permission and gets silently blocked.
+// Chrome is far more lenient here, which is why this was only ever
+// showing up on the phone.
+let ttsAudioEl = null;
+
+function ensureTtsAudioElement() {
+  if (!ttsAudioEl) {
+    ttsAudioEl = new Audio();
+    ttsAudioEl.setAttribute("playsinline", ""); // avoids iOS trying to full-screen it
+  }
+  return ttsAudioEl;
+}
+
+// Call synchronously, inside a real tap handler, before any `await` —
+// this is what actually "unlocks" ttsAudioEl for Safari.
+function primeTtsAudioElement() {
+  try {
+    const el = ensureTtsAudioElement();
+    el.src = "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    el.play().catch(() => {});
+  } catch (error) {}
+}
+
 // The plain text Beeto is currently speaking aloud, if any — used to
 // tell a genuine interruption apart from the mic just picking up
 // Beeto's own voice through the speaker (a real risk without
@@ -210,7 +240,8 @@ async function speakText(text, onDone) {
 
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+    const audio = ensureTtsAudioElement(); // reuse the primed element — see comment above
+    audio.src = url;
     currentTtsAudio = audio;
 
     audio.onended = () => {
@@ -264,6 +295,7 @@ function toggleSpeak(text, btn) {
 
   if (wasThisOneSpeaking) return; // this button's own click was the "stop" tap
 
+  primeTtsAudioElement(); // synchronous, right inside this tap — required for Safari, see comment above
   btn.textContent = "Stop";
   speakText(text, () => { btn.textContent = "Listen"; });
 }
@@ -549,11 +581,12 @@ if (SpeechRecognitionCtor) {
   // round trip to Groq for a reply — by then, the original tap's
   // "permission window" for starting audio may have already expired,
   // which is exactly what produces "everything else works, but
-  // nothing plays out loud." Playing a near-silent sound and a
-  // near-silent speech utterance synchronously, right here inside the
-  // tap that turns voice mode on, unlocks audio playback for the rest
-  // of this page session, so the later async-triggered speakText()
-  // call is actually allowed to produce sound.
+  // nothing plays out loud." Priming the shared TTS <audio> element
+  // (see primeTtsAudioElement above) and a near-silent speech
+  // utterance synchronously, right here inside the tap that turns
+  // voice mode on, unlocks audio playback on that SAME element for
+  // the rest of this page session, so the later async-triggered
+  // speakText() call is actually allowed to produce sound.
   // --------------------------------------------------------------
   function unlockAudioPlayback() {
     try {
@@ -564,15 +597,7 @@ if (SpeechRecognitionCtor) {
       }
     } catch (error) {}
 
-    try {
-      // A ~0.1s silent MP3, base64-encoded inline — just enough for
-      // the browser to register a real playback start inside this
-      // gesture, without anyone actually hearing anything.
-      const silentAudio = new Audio(
-        "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-      );
-      silentAudio.play().catch(() => {});
-    } catch (error) {}
+    primeTtsAudioElement();
   }
 
   wakeToggleBtn.addEventListener("click", () => {
@@ -3481,3 +3506,4 @@ function getActiveSession() {
 renderActiveChat();
 renderToolsPopupState();
 restoreDraft();
+
