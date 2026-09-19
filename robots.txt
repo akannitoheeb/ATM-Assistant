@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://assistant.toheebakanni.name.ng/sitemap.xml
+Sitemap: https://beeto.toheebakanni.name.ng/sitemap.xml
