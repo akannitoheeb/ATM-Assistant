@@ -8,6 +8,7 @@
 // ============================================================
 
 const CHAT_API_URL = "/api/chat";
+const TTS_API_URL = "/api/tts";
 const BREVO_SIGNUP_URL = "/api/brevo-signup";
 
 // --------------------------------------------------------------
@@ -142,15 +143,73 @@ function stopRecordingUI() {
 // (used both by the per-message "Listen" button and by voice-mode
 // auto-playback below); toggleSpeak() wraps it for the button's
 // on/off label behaviour.
+//
+// Tries Beeto's actual ElevenLabs voice first (higher quality, a
+// real chosen voice rather than whatever robotic default the OS
+// ships), via the /api/tts endpoint. That endpoint requires a
+// logged-in user (ElevenLabs bills per character generated, same
+// cost-gating reasoning as the send_email tool), so guests — and
+// anyone whose request fails for any other reason: no API key set,
+// network error, ElevenLabs itself erroring — transparently fall
+// back to the browser's free built-in SpeechSynthesis instead of
+// going silent.
 // --------------------------------------------------------------
-function speakText(text, onDone) {
+let currentTtsAudio = null; // the ElevenLabs <audio> currently playing, if any
+
+function stopAllSpeech() {
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  if (currentTtsAudio) {
+    currentTtsAudio.pause();
+    currentTtsAudio.currentTime = 0;
+    currentTtsAudio = null;
+  }
+}
+
+async function speakText(text, onDone) {
+  stopAllSpeech();
+  const plainText = text.replace(/[*_#`]/g, ""); // strip stray markdown before speaking
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(TTS_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify({ text: plainText })
+    });
+
+    if (!response.ok) throw new Error("TTS request failed: " + response.status);
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    currentTtsAudio = audio;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      if (currentTtsAudio === audio) currentTtsAudio = null;
+      if (onDone) onDone();
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      if (currentTtsAudio === audio) currentTtsAudio = null;
+      speakWithBrowserVoice(plainText, onDone);
+    };
+
+    await audio.play();
+    return;
+  } catch (error) {
+    console.error("Beeto voice — ElevenLabs TTS unavailable, falling back to browser voice:", error);
+  }
+
+  speakWithBrowserVoice(plainText, onDone);
+}
+
+function speakWithBrowserVoice(plainText, onDone) {
   if (!("speechSynthesis" in window)) {
     if (onDone) onDone();
     return;
   }
 
-  speechSynthesis.cancel();
-  const plainText = text.replace(/[*_#`]/g, ""); // strip stray markdown before speaking
   const utterance = new SpeechSynthesisUtterance(plainText);
 
   if (settings.voiceURI) {
@@ -165,10 +224,8 @@ function speakText(text, onDone) {
 }
 
 function toggleSpeak(text, btn) {
-  if (!("speechSynthesis" in window)) return;
-
   const wasThisOneSpeaking = btn.textContent === "Stop";
-  speechSynthesis.cancel();
+  stopAllSpeech();
   document.querySelectorAll(".message-actions .action-btn").forEach((b) => {
     if (b.textContent === "Stop") b.textContent = "Listen";
   });
@@ -178,6 +235,7 @@ function toggleSpeak(text, btn) {
   btn.textContent = "Stop";
   speakText(text, () => { btn.textContent = "Listen"; });
 }
+
 
 function populateVoiceOptions() {
   if (!("speechSynthesis" in window) || !voiceSelect) return;
@@ -203,52 +261,50 @@ if ("speechSynthesis" in window) {
 }
 
 // --------------------------------------------------------------
-// Voice mode — "Hey Beeto" wake word + auto-listen/auto-speak loop.
+// Voice mode — tap once to start a hands-free conversation.
 //
-// Only works while this tab is open and on-screen (a browser tab
-// can't keep the mic open in the background or with the screen off
-// — that would need a native app). Within that constraint, this
-// gives a real hands-free loop: say "Hey Beeto", speak your
-// message, it sends automatically, and the reply is read back,
-// then it starts listening for the wake word again.
+// This used to try to listen continuously in the background for a
+// "Hey Beeto" wake phrase. That's been removed: the Web Speech API's
+// continuous-listening mode isn't reliably supported for real hotword
+// detection on mobile Chrome or Safari, and it failed the same way on
+// both platforms — the signature of a platform limitation, not a bug
+// worth chasing further with more retry logic. True hands-free
+// wake-word would need either a native app, or a dedicated on-device
+// keyword-spotting engine (e.g. Picovoice Porcupine) instead of the
+// browser's built-in recognition.
 //
-// Two separate SpeechRecognition instances are used on purpose:
-// `wakeRecognition` runs continuous+interim (to catch the wake
-// phrase as early as possible) and restarts itself on every `end`
-// event, since even Chrome's continuous mode eventually times out
-// on its own. `commandRecognition` is single-utterance, just like
-// the existing tap-to-talk `recognition` above, so a spoken command
-// behaves the same way whether it started from a tap or a wake word.
+// What it does instead: tap the button once, speak, it sends
+// automatically, the reply is read back, and it automatically starts
+// listening again — so only the first tap (and the final tap to end
+// the session) are manual. This relies only on ordinary
+// single-utterance recognition, the same reliable mode the original
+// tap-to-talk mic button already used, just looped.
 //
-// The wake listener is deliberately NOT running while Beeto's own
-// reply is being spoken aloud — restarting it only after speech
-// finishes avoids the mic picking up Beeto's own voice out of the
-// speakers and mistaking it for a new wake word.
+// Listening is deliberately paused while Beeto's own reply is being
+// spoken aloud — it only starts listening again once speech finishes,
+// so the mic doesn't pick up Beeto's own voice out of the speakers
+// and mistake it for the next thing to send.
 //
 // Voice mode does not persist across reloads or turn on by itself —
 // it always starts off, and requires an explicit tap, since silently
 // re-enabling a live microphone on page load would be a bad surprise.
 // --------------------------------------------------------------
-const WAKE_WORD_PATTERNS = [/\bhey beeto\b/i, /\bhi beeto\b/i, /\bok(ay)? beeto\b/i];
+let voiceModeEnabled = false; // "voice session" active — tap-to-start/stop, not a wake word
 
-let voiceModeEnabled = false;
-let isListeningForCommand = false;
-let pendingCommandStart = false;
-let wakeRecognition = null;
+let commandProducedResult = false; // tracks whether the current listening pass actually heard something
 let commandRecognition = null;
 let wakeToggleBtn = null;
 let voiceOrbEl = null;
 let voiceOrbCircle = null;
 let voiceStatusLabelEl = null;
 
-// Real-time mic level metering, kept separate from the two
-// SpeechRecognition instances below — SpeechRecognition never exposes
-// raw audio volume, so getting the audio-reactive size-pulsing the
-// orb needs (the actual thing that makes Siri/Gemini's orb feel
-// "alive," not just decorative) requires its own getUserMedia stream
-// run through a Web Audio AnalyserNode. This reuses the mic
-// permission already granted for speech recognition, so it doesn't
-// prompt the person a second time.
+// Real-time mic level metering, kept separate from commandRecognition
+// itself — SpeechRecognition never exposes raw audio volume, so
+// getting the audio-reactive size-pulsing the orb needs (the actual
+// thing that makes Siri/Gemini's orb feel "alive," not just
+// decorative) requires its own getUserMedia stream run through a Web
+// Audio AnalyserNode. This reuses the mic permission already granted
+// for speech recognition, so it doesn't prompt the person a second time.
 let micStream = null;
 let micAudioContext = null;
 let micAnalyser = null;
@@ -274,14 +330,10 @@ if (SpeechRecognitionCtor) {
       width: 56px;
       height: 56px;
       border-radius: 50%;
-      background: radial-gradient(circle at 35% 30%, #F3D9A4, #C9962E 55%, #8a6416 100%);
-      box-shadow: 0 0 24px 6px rgba(201,150,46,0.55);
-      transform: scale(var(--orb-scale, 1));
-      transition: transform 70ms linear, background 300ms ease, box-shadow 300ms ease;
-    }
-    .voice-orb-wrap[data-state="wake"] .voice-orb {
       background: radial-gradient(circle at 35% 30%, #cfeed9, #7DB88A 55%, #4c7a58 100%);
       box-shadow: 0 0 20px 5px rgba(125,184,138,0.5);
+      transform: scale(var(--orb-scale, 1));
+      transition: transform 70ms linear, background 300ms ease, box-shadow 300ms ease;
     }
     .voice-orb-wrap[data-state="thinking"] .voice-orb {
       background: conic-gradient(from 0deg, #C9962E, #E0765A, #7DB88A, #C9962E);
@@ -323,16 +375,32 @@ if (SpeechRecognitionCtor) {
   wakeToggleBtn.className = "action-btn";
   wakeToggleBtn.textContent = "🐝";
   wakeToggleBtn.setAttribute("aria-pressed", "false");
-  wakeToggleBtn.setAttribute("aria-label", "Turn on voice mode");
-  wakeToggleBtn.title = 'Voice mode — say "Hey Beeto"';
+  wakeToggleBtn.setAttribute("aria-label", "Start a hands-free voice conversation");
+  wakeToggleBtn.title = "Tap to start a hands-free voice conversation";
   micBtn.insertAdjacentElement("afterend", wakeToggleBtn);
 
+  // A wake-phrase toggle ("Hey Beeto") used to live here, listening
+  // continuously in the background. It's gone on purpose: the Web
+  // Speech API's "continuous" mode isn't reliably supported for
+  // always-on hotword detection on mobile Chrome or Safari — it
+  // failed the same way on both platforms, which is the signature of
+  // a platform limitation, not a bug worth chasing further here. True
+  // hands-free wake-word would need either a native app or a
+  // dedicated on-device keyword-spotting engine (e.g. Picovoice
+  // Porcupine) instead of the browser's built-in speech recognition.
+  //
+  // What replaces it: tap once to start a session, speak, it
+  // auto-sends and auto-speaks the reply, then automatically starts
+  // listening again — so only the very first tap is manual. This
+  // relies only on ordinary single-utterance recognition, the same
+  // reliable mode the original tap-to-talk mic button already used.
   commandRecognition = new SpeechRecognitionCtor();
   commandRecognition.continuous = false;
   commandRecognition.interimResults = false;
   commandRecognition.lang = "en-US";
 
   commandRecognition.onresult = (event) => {
+    commandProducedResult = true;
     const transcript = event.results[0][0].transcript;
     userInput.value = transcript;
     autoGrow();
@@ -342,55 +410,15 @@ if (SpeechRecognitionCtor) {
   commandRecognition.onerror = (event) => {
     // Logged with a distinct prefix on purpose — if voice mode is
     // still misbehaving, open the browser console and look for lines
-    // starting with "Beeto voice mode" to see exactly which stage and
-    // which native error code is actually firing.
-    console.error("Beeto voice mode — command recognition error:", event.error);
-    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-      voiceModeEnabled = false;
-      updateVoiceModeUI();
-      setVoiceStatus("idle");
-      alert("Microphone access was blocked. Enable it under Settings > Safari > Microphone for this site.");
-    }
-  };
-
-  commandRecognition.onend = () => {
-    isListeningForCommand = false;
-    // Don't restart wake listening here — handleSend restarts it once
-    // the reply has been spoken (see below), so the mic isn't live
-    // while Beeto's own voice is coming out of the speakers.
-    if (!voiceModeEnabled) setVoiceStatus("idle");
-  };
-
-  wakeRecognition = new SpeechRecognitionCtor();
-  wakeRecognition.continuous = true;
-  wakeRecognition.interimResults = true;
-  wakeRecognition.lang = "en-US";
-
-  wakeRecognition.onresult = (event) => {
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript;
-      if (WAKE_WORD_PATTERNS.some((p) => p.test(transcript))) {
-        pendingCommandStart = true;
-        isListeningForCommand = true; // stops wake's own onend from racing a restart
-        wakeRecognition.stop();
-        break;
-      }
-    }
-  };
-
-  wakeRecognition.onerror = (event) => {
-    console.error("Beeto voice mode — wake recognition error:", event.error);
-    // "no-speech" and "aborted" fire constantly and harmlessly in
-    // continuous mode — they just mean "nothing heard yet," not a
-    // real failure, so onend's own restart logic handles those.
-    // Only a genuine permission or hardware problem should actually
-    // turn voice mode off and say why.
+    // starting with "Beeto voice mode" to see exactly which native
+    // error code is actually firing.
+    console.error("Beeto voice mode — recognition error:", event.error);
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       voiceModeEnabled = false;
       updateVoiceModeUI();
       setVoiceStatus("idle");
       stopMicLevelMeter();
-      alert("Microphone access was blocked. Enable it under Settings > Safari > Microphone for this site.");
+      alert("Microphone access was blocked. Enable it under Settings > Safari > Microphone for this site (or the equivalent site-permissions screen on Android Chrome).");
     } else if (event.error === "audio-capture") {
       voiceModeEnabled = false;
       updateVoiceModeUI();
@@ -398,34 +426,31 @@ if (SpeechRecognitionCtor) {
       stopMicLevelMeter();
       alert("No microphone was found on this device.");
     }
+    // "no-speech" / "aborted" are recoverable — onend's own retry
+    // below handles those by just listening again.
   };
 
-  wakeRecognition.onend = () => {
-    if (pendingCommandStart) {
-      pendingCommandStart = false;
-      setVoiceStatus("listening");
-      try {
-        commandRecognition.start();
-      } catch (error) {
-        console.error("Beeto voice mode — could not start command recognition:", error);
-        isListeningForCommand = false;
-        if (voiceModeEnabled) {
-          setVoiceStatus("wake");
-          try { wakeRecognition.start(); } catch (e2) {}
-        }
-      }
+  commandRecognition.onend = () => {
+    if (commandProducedResult) {
+      // A result came in, which already triggered chatForm.requestSubmit()
+      // above — handleSend now owns the flow (thinking → speaking →
+      // relisten), so don't restart listening again here or two
+      // recognition passes would race each other.
+      commandProducedResult = false;
       return;
     }
 
-    // Browsers end continuous recognition on their own after a while —
-    // restart it automatically as long as voice mode is still on and
-    // we're not mid-command or mid-speech.
-    if (voiceModeEnabled && !isListeningForCommand) {
+    // Ended with nothing heard (silence, or a recoverable error) — if
+    // the session is still on, just listen again instead of going
+    // idle and forcing another tap.
+    if (voiceModeEnabled) {
       try {
-        wakeRecognition.start();
+        commandRecognition.start();
       } catch (error) {
-        console.error("Beeto voice mode — could not restart wake recognition:", error);
+        console.error("Beeto voice mode — could not restart listening:", error);
       }
+    } else {
+      setVoiceStatus("idle");
     }
   };
 
@@ -434,19 +459,20 @@ if (SpeechRecognitionCtor) {
     updateVoiceModeUI();
 
     if (voiceModeEnabled) {
-      setVoiceStatus("wake");
+      setVoiceStatus("listening");
       startMicLevelMeter();
+      commandProducedResult = false;
       try {
-        wakeRecognition.start();
+        commandRecognition.start();
       } catch (error) {
-        // This fires immediately (synchronously) if, for example, the
-        // browser genuinely has no SpeechRecognition support in this
+        // Fires immediately (synchronously) if, for example, the
+        // browser genuinely has no working speech recognition in this
         // context despite the constructor existing, or mic permission
         // was already denied at the OS level. Surfacing it directly
         // instead of failing silently is the fastest way to tell
-        // "wake word doesn't work" apart from "wake word isn't even
-        // starting."
-        console.error("Beeto voice mode — could not start wake recognition:", error);
+        // "voice mode doesn't work here at all" apart from some other
+        // issue further down the flow.
+        console.error("Beeto voice mode — could not start listening:", error);
         voiceModeEnabled = false;
         updateVoiceModeUI();
         setVoiceStatus("idle");
@@ -455,11 +481,9 @@ if (SpeechRecognitionCtor) {
       }
     } else {
       setVoiceStatus("idle");
-      try { wakeRecognition.stop(); } catch (error) {}
       try { commandRecognition.stop(); } catch (error) {}
-      speechSynthesis.cancel();
-      isListeningForCommand = false;
-      pendingCommandStart = false;
+      stopAllSpeech();
+      commandProducedResult = false;
       stopMicLevelMeter();
     }
   });
@@ -469,8 +493,10 @@ function updateVoiceModeUI() {
   if (!wakeToggleBtn) return;
   wakeToggleBtn.classList.toggle("active", voiceModeEnabled);
   wakeToggleBtn.setAttribute("aria-pressed", String(voiceModeEnabled));
-  wakeToggleBtn.title = voiceModeEnabled ? 'Voice mode on — say "Hey Beeto"' : 'Voice mode — say "Hey Beeto"';
-  micBtn.disabled = voiceModeEnabled; // wake mode already owns the mic; avoid two recognitions fighting over it
+  wakeToggleBtn.title = voiceModeEnabled
+    ? "Voice mode on — tap to end the conversation"
+    : "Tap to start a hands-free voice conversation";
+  micBtn.disabled = voiceModeEnabled; // voice mode already owns the mic; avoid two recognitions fighting over it
 }
 
 function setVoiceStatus(state) {
@@ -482,7 +508,6 @@ function setVoiceStatus(state) {
   voiceOrbEl.classList.remove("hidden");
   voiceOrbEl.dataset.state = state;
   const labels = {
-    wake: 'Listening for "Hey Beeto"…',
     listening: "Listening…",
     thinking: "Thinking…",
     speaking: "Speaking…"
@@ -494,10 +519,9 @@ function setVoiceStatus(state) {
 // Audio-reactive orb sizing — the part that actually makes it feel
 // like Siri/Gemini rather than a static icon: the orb visibly grows
 // and shrinks with how loud you're talking, in real time, while in
-// the "wake" (listening for the wake word) or "listening" (capturing
-// a command) states. During "thinking"/"speaking" this hands control
-// back to the CSS animations above instead, since nothing meaningful
-// is coming through the mic in those states.
+// the "listening" state. During "thinking"/"speaking" this hands
+// control back to the CSS animations above instead, since nothing
+// meaningful is coming through the mic in those states.
 // --------------------------------------------------------------
 async function startMicLevelMeter() {
   if (micStream) return; // already running
@@ -518,7 +542,7 @@ async function startMicLevelMeter() {
       const avg = data.reduce((sum, v) => sum + v, 0) / data.length;
 
       const state = voiceOrbEl?.dataset.state;
-      if (state === "wake" || state === "listening") {
+      if (state === "listening") {
         const scale = 1 + Math.min(avg / 90, 1) * 0.5;
         voiceOrbCircle.style.setProperty("--orb-scale", scale.toFixed(2));
       } else {
@@ -551,6 +575,7 @@ function stopMicLevelMeter() {
   micAnalyser = null;
   if (voiceOrbCircle) voiceOrbCircle.style.setProperty("--orb-scale", "1");
 }
+
 
 const sidebar = document.getElementById("sidebar");
 const sidebarOpenBtn = document.getElementById("sidebarOpenBtn");
@@ -2236,8 +2261,9 @@ async function handleSend(event) {
         setVoiceStatus("speaking");
         speakText(result.reply, () => {
           if (voiceModeEnabled) {
-            setVoiceStatus("wake");
-            try { wakeRecognition.start(); } catch (error) {}
+            setVoiceStatus("listening");
+            commandProducedResult = false;
+            try { commandRecognition.start(); } catch (error) {}
           } else {
             setVoiceStatus("idle");
           }
@@ -2272,14 +2298,15 @@ async function handleSend(event) {
     currentAbortController = null;
 
     // Campaign/sequence replies, errors, and aborts never trigger
-    // speakText() above, so nothing will resume wake listening on its
-    // own in those cases — do it here instead. When a normal reply IS
+    // speakText() above, so nothing will resume listening on its own
+    // in those cases — do it here instead. When a normal reply IS
     // being spoken, speakText's own onDone callback handles the resume
     // once it's actually finished, so skip it here to avoid restarting
     // the mic while Beeto is still talking.
     if (voiceModeEnabled && !voiceWillRespond) {
-      setVoiceStatus("wake");
-      try { wakeRecognition.start(); } catch (error) {}
+      setVoiceStatus("listening");
+      commandProducedResult = false;
+      try { commandRecognition.start(); } catch (error) {}
     }
   }
 }
@@ -3321,3 +3348,4 @@ function getActiveSession() {
 renderActiveChat();
 renderToolsPopupState();
 restoreDraft();
+
