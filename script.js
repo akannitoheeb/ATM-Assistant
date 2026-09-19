@@ -166,16 +166,21 @@ let currentlySpokenText = null;
 
 function looksLikeEcho(transcript) {
   const heard = transcript.trim().toLowerCase();
-  if (!currentlySpokenText || heard.length < 3) return false;
+  if (!currentlySpokenText) return false;
   // Not an exact-substring-only check — recognized speech (especially
   // an early interim result) rarely lines up word-for-word with the
   // source text, so this checks how much of what was heard actually
-  // shows up in what's being spoken, word by word.
+  // shows up in what's being spoken, word by word. Words of length 1
+  // are excluded (too likely to coincidentally match) but 2-letter
+  // words are kept — dropping them was leaving very short interim
+  // fragments (exactly what an echo's first fragment looks like) with
+  // nothing to compare, defaulting to "not an echo" and cutting Beeto
+  // off on essentially no evidence.
   const spoken = currentlySpokenText.toLowerCase();
-  const heardWords = heard.split(/\s+/).filter(w => w.length > 2);
-  if (heardWords.length === 0) return false;
+  const heardWords = heard.split(/\s+/).filter(w => w.length > 1);
+  if (heardWords.length === 0) return true; // nothing substantial enough to judge — treat as inconclusive, not as a confirmed interruption
   const matchedWords = heardWords.filter(w => spoken.includes(w));
-  return matchedWords.length / heardWords.length > 0.6; // most of what it heard is also in what's playing
+  return matchedWords.length / heardWords.length > 0.5; // most of what it heard is also in what's playing
 }
 
 function stopAllSpeech() {
@@ -461,6 +466,16 @@ if (SpeechRecognitionCtor) {
     // does, treat it as the mic hearing itself and ignore it rather
     // than cutting Beeto off over its own voice.
     if (isBeetoTalking) {
+      const wordsHeardSoFar = transcript.trim().split(/\s+/).filter(Boolean).length;
+      if (wordsHeardSoFar < 2) {
+        // A single short fragment is exactly what the leading edge of
+        // an echo looks like, and not enough to judge either way yet
+        // — wait for the next interim update instead of reacting to
+        // it. A real interruption will keep producing more words
+        // within the next moment anyway, so this costs a fraction of
+        // a second, not real responsiveness.
+        return;
+      }
       if (looksLikeEcho(transcript)) {
         return;
       }
