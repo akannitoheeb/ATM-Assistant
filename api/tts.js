@@ -7,7 +7,7 @@
 // Restricted to logged-in users only: ElevenLabs bills per character
 // generated, so this follows the same cost-gating reasoning as the
 // send_email tool in chat.js — guests get a 401 here and the client
-// silently falls back to the browser's free built-in voice instead.
+// falls back to the browser's free built-in voice instead.
 //
 // Requires an ELEVENLABS_API_KEY env var (from elevenlabs.io).
 // ============================================================
@@ -19,8 +19,12 @@ const VOICE_ID = "J9NvviOEdVm6E7Hwdpdj";
 
 // ElevenLabs bills per character — this caps what a single reply can
 // cost to speak. Long replies still show in full as text; only the
-// audio gets trimmed.
+// audio gets trimmed (at a sentence boundary, see trimToSentence).
 const MAX_TTS_CHARS = 2000;
+
+// Smaller, faster MP3 — noticeably quicker to download on mobile
+// data, and plenty good for a voice assistant.
+const OUTPUT_FORMAT = "mp3_22050_32";
 
 const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvdXZjdnJuc2VnemVjcWRrb2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDAxOTEsImV4cCI6MjEwMjMxNjE5MX0.fnkm94U5c-gbdDMrBvVoZ4ewyEUcOlRY7TJkqkEQS1Q";
@@ -40,6 +44,15 @@ async function verifySupabaseToken(authHeader) {
   return response.json();
 }
 
+// Cuts long text at the last sentence end before the limit, so the
+// audio doesn't stop mid-word.
+function trimToSentence(text, max) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const lastEnd = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("? "), cut.lastIndexOf("! "));
+  return lastEnd > max * 0.5 ? cut.slice(0, lastEnd + 1) : cut;
+}
+
 module.exports = async function (req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -52,9 +65,8 @@ module.exports = async function (req, res) {
 
   const user = await verifySupabaseToken(req.headers.authorization);
   if (!user) {
-    // Client-side, this 401 is expected and silent for guests — it's
-    // what triggers the fallback to the browser's own voice rather
-    // than showing an error.
+    // Client-side, this 401 is expected for guests — it's what
+    // triggers the fallback to the browser's own voice.
     return res.status(401).json({ error: "Sign in to use Beeto's voice." });
   }
 
@@ -64,26 +76,29 @@ module.exports = async function (req, res) {
   }
 
   const { text } = req.body || {};
-  if (!text || !text.trim()) {
+  if (typeof text !== "string" || !text.trim()) {
     return res.status(400).json({ error: "No text provided." });
   }
 
-  const trimmedText = text.trim().slice(0, MAX_TTS_CHARS);
+  const trimmedText = trimToSentence(text.trim(), MAX_TTS_CHARS);
 
   try {
-    const elevenResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey,
-        "Content-Type": "application/json",
-        "Accept": "audio/mpeg"
-      },
-      body: JSON.stringify({
-        text: trimmedText,
-        model_id: "eleven_turbo_v2_5",
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 }
-      })
-    });
+    const elevenResponse = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?output_format=${OUTPUT_FORMAT}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+          "Accept": "audio/mpeg"
+        },
+        body: JSON.stringify({
+          text: trimmedText,
+          model_id: "eleven_turbo_v2_5",
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+        })
+      }
+    );
 
     if (!elevenResponse.ok) {
       const errText = await elevenResponse.text();
