@@ -46,7 +46,7 @@
 <link rel="manifest" href="/site.webmanifest">
   <!-- =================================================== -->
 
-  <link rel="stylesheet" href="style.css?v=3" />
+  <link rel="stylesheet" href="style.css?v=4" />
 
   <!-- KaTeX — renders $...$ / $$...$$ math the assistant sends back as
        real typeset equations instead of raw LaTeX text. -->
@@ -467,10 +467,27 @@
     <main class="main">
 
       <!-- Shown only when there's no active conversation yet -->
-        <div id="greetingState" class="greeting-state">
-         <img src="/beeto-icon-gold-512.png" alt="Beeto" class="brand-mark" style="width:24px; height:24px;">
-          <h1>What can I help with?</h1>
+      <div id="greetingState" class="greeting-state">
+        <img src="/beeto-icon-gold-512.png" alt="Beeto" class="brand-mark" style="width:24px; height:24px;">
+        <h1>What can I help with?</h1>
         <p class="greeting-sub">Ask anything, especially sharp on email marketing.</p>
+
+        <!-- Real, crawlable text about Beeto (helps Google index the homepage) -->
+        <section class="home-about">
+          <h2>Beeto: the AI chatbot built for email marketing</h2>
+          <p>
+            Beeto is a free AI chatbot that writes subject lines, full email campaigns and
+            multi-email sequences, and checks your copy for deliverability issues before you send.
+            Built by <a href="/about.html">Toheeb Akanni</a>, a freelance email marketing strategist
+            and WordPress web designer in Lagos, Nigeria.
+          </p>
+          <ul>
+            <li><strong>Campaigns:</strong> subject lines, preheader, body and call-to-action, ready to send.</li>
+            <li><strong>Sequences:</strong> 3 to 5-email drip flows, each with its own purpose.</li>
+            <li><strong>Deliverability checks:</strong> spam triggers and CAN-SPAM, GDPR and CASL gaps.</li>
+            <li><strong>Brand-matched copy:</strong> set your voice and audience once.</li>
+          </ul>
+        </section>
       </div>
 
       <div id="privateModeBanner" class="private-mode-banner hidden">
@@ -571,6 +588,14 @@
         <button type="button" id="sendBtn" aria-label="Send">↑</button>
       </form>
       <p class="disclaimer-text">Beeto can make mistakes. Consider checking important information. <button type="button" id="supportFooterLink" class="support-footer-link">Support this project</button></p>
+
+      <!-- Always-visible links so Google (and visitors) can find these pages -->
+      <nav class="home-footer-links" aria-label="Site links">
+        <a href="/about.html">About</a>
+        <a href="/faq.html">FAQ</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+      </nav>
     </main>
 
   </div>
