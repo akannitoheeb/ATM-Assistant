@@ -73,7 +73,7 @@ module.exports = async function (req, res) {
         tx_ref,
         amount: String(Math.round(Number(amount))),
         currency,
-        redirect_url: "https://assistant.toheebakanni.name.ng/?supported=1",
+        redirect_url: "https://beeto.toheebakanni.name.ng/?supported=1",
         customer: { email: user ? user.email : "guest@toheebakanni.name.ng" },
         customizations: {
           title: "Support Beeto",
