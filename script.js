@@ -191,7 +191,8 @@ function primeTtsAudioElement() {
 // as soon as Beeto finishes speaking instead.
 const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
   (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-const bargeInEnabled = !isIOS;
+const isMobileDevice = isIOS || /Android/i.test(navigator.userAgent);
+const bargeInEnabled = !isMobileDevice; // on phones the mic and speaker fight over the audio session
 
 // The plain text Beeto is currently speaking aloud, if any — used to
 // tell a genuine interruption apart from the mic just picking up
@@ -368,11 +369,15 @@ function speakWithBrowserVoice(plainText, onDone) {
   currentlySpokenText = plainText; // re-set in case this was reached via the ElevenLabs error fallback
   const myToken = ++speechToken;
 
-  // A voice picked in Settings always wins; otherwise use the best one available.
+  // A voice picked in Settings always wins. On desktop, otherwise use the
+  // best one available. On phones, the device's own default is the safest
+  // choice (some listed phone voices are silent or need a download).
   const allVoices = speechSynthesis.getVoices();
-  const voice =
+  let voice =
     allVoices.find((v) => v.voiceURI === settings.voiceURI) ||
-    pickBestBrowserVoice(allVoices);
+    (isMobileDevice ? null : pickBestBrowserVoice(allVoices));
+
+  try { speechSynthesis.resume(); } catch (error) {} // clears a stuck "paused" state after cancel()
 
   const chunks = splitIntoSpeechChunks(plainText);
   let index = 0;
@@ -395,7 +400,11 @@ function speakWithBrowserVoice(plainText, onDone) {
     utterance.onerror = (event) => {
       if (myToken !== speechToken) return;
       if (event.error === "canceled" || event.error === "interrupted") return;
-      speakNext(); // skip a piece that failed and carry on
+      if (voice) {
+        voice = null; // that voice failed, retry this same piece with the default voice
+        index--;
+      }
+      speakNext();
     };
 
     speechSynthesis.speak(utterance);
@@ -461,6 +470,8 @@ let voiceModeEnabled = false; // "voice session" active — tap-to-start/stop, n
 
 let commandProducedResult = false; // tracks whether the current listening pass actually heard something
 let commandRecognitionActive = false; // so barge-in and the normal resume flow never both call .start() at once
+let lastListenStartedByTap = false; // phones often refuse to restart the mic without a real tap
+let lastHeardTranscript = ""; // last words the recognizer heard in this listening pass
 let startCommandListening = () => {}; // reassigned below once commandRecognition exists
 let commandRecognition = null;
 let wakeToggleBtn = null;
@@ -525,6 +536,11 @@ if (SpeechRecognitionCtor) {
       font-size: 12px;
       white-space: nowrap;
     }
+    .voice-orb-wrap[data-state="paused"] { pointer-events: auto; cursor: pointer; }
+    .voice-orb-wrap[data-state="paused"] .voice-orb {
+      background: radial-gradient(circle at 35% 30%, #e6e6e6, #9aa0ab 55%, #5c6270 100%);
+      box-shadow: 0 0 16px 4px rgba(150,150,150,0.4);
+    }
     #wakeToggleBtn.active { color: #C9962E; }
   `;
   document.head.appendChild(voiceStyleTag);
@@ -554,26 +570,46 @@ if (SpeechRecognitionCtor) {
   // Centralizes starting commandRecognition so barge-in and the normal
   // "resume listening" calls never both try to start it at once —
   // Safari/Chrome both throw if .start() is called while running.
-  startCommandListening = function () {
+  startCommandListening = function (fromTap = false) {
     if (commandRecognitionActive) return;
+    lastListenStartedByTap = fromTap;
+    lastHeardTranscript = "";
     try {
       commandRecognition.start();
       commandRecognitionActive = true;
     } catch (error) {
       console.error("Beeto voice mode — could not start listening:", error);
+      if (voiceModeEnabled && !fromTap) setVoiceStatus("paused"); // ask for a tap instead of dying
     }
   };
+
+  // Sends what was heard as a normal chat message.
+  function submitVoiceTranscript(text) {
+    const clean = String(text || "").trim();
+    lastHeardTranscript = "";
+    if (!clean) return;
+    if (isSending) return; // a reply is already in flight; onend will just listen again
+    commandProducedResult = true;
+    userInput.value = clean;
+    autoGrow();
+    chatForm.requestSubmit(); // auto-send — this is the "no tapping" part
+  }
 
   commandRecognition.onresult = (event) => {
     const result = event.results[event.results.length - 1];
     const transcript = result[0].transcript;
-    const isBeetoTalking = currentTtsAudio || ("speechSynthesis" in window && speechSynthesis.speaking);
 
-    // Barge-in: if real speech is detected while Beeto is talking,
-    // cut it off right away. Without headphones the mic can hear
-    // Beeto's own voice, so first check whether what was heard
-    // matches what's currently being spoken (looksLikeEcho).
-    if (isBeetoTalking) {
+    // "Beeto is talking" only counts when Beeto's own reply is playing,
+    // not a leftover flag from the silent unlock utterance.
+    const isBeetoTalking =
+      currentTtsAudio ||
+      (currentlySpokenText && "speechSynthesis" in window && speechSynthesis.speaking);
+
+    // Barge-in (desktop only): if real speech is detected while Beeto is
+    // talking, cut it off right away. Without headphones the mic can hear
+    // Beeto's own voice, so first check whether what was heard matches
+    // what's currently being spoken (looksLikeEcho).
+    if (bargeInEnabled && isBeetoTalking) {
       const wordsHeardSoFar = transcript.trim().split(/\s+/).filter(Boolean).length;
       if (wordsHeardSoFar < 2) {
         return; // one short fragment is what the start of an echo looks like; wait for more
@@ -585,18 +621,32 @@ if (SpeechRecognitionCtor) {
       setVoiceStatus("listening");
     }
 
-    if (!result.isFinal) return; // wait for the complete utterance before sending
+    // Remember the latest words, and show them live so it's obvious the
+    // phone is actually hearing you.
+    if (transcript.trim()) {
+      lastHeardTranscript = transcript;
+      if (voiceOrbEl?.dataset.state === "listening" && voiceStatusLabelEl) {
+        voiceStatusLabelEl.textContent = "\u201C" + transcript.trim().slice(-48) + "\u201D";
+      }
+    }
 
-    commandProducedResult = true;
-    userInput.value = transcript;
-    autoGrow();
-    chatForm.requestSubmit(); // auto-send — this is the "no tapping" part
+    if (!result.isFinal) return; // wait for the complete utterance before sending
+    submitVoiceTranscript(transcript);
   };
 
   commandRecognition.onerror = (event) => {
     console.error("Beeto voice mode — recognition error:", event.error);
     commandRecognitionActive = false;
+    if (voiceModeEnabled && voiceStatusLabelEl && event.error !== "no-speech" && event.error !== "aborted") {
+      voiceStatusLabelEl.textContent = "Mic issue: " + event.error; // phones have no console, so show it
+    }
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      if (voiceModeEnabled && !lastListenStartedByTap) {
+        // The mic worked at first but the phone refused an automatic
+        // restart. Not a permission problem: just ask for a tap.
+        setVoiceStatus("paused");
+        return;
+      }
       voiceModeEnabled = false;
       updateVoiceModeUI();
       setVoiceStatus("idle");
@@ -622,14 +672,32 @@ if (SpeechRecognitionCtor) {
       return;
     }
 
+    // Some phones end the session without ever marking the result as
+    // final. If words were heard, send them anyway.
+    if (voiceModeEnabled && lastHeardTranscript.trim()) {
+      submitVoiceTranscript(lastHeardTranscript);
+      if (commandProducedResult) {
+        commandProducedResult = false;
+        return;
+      }
+    }
+
     // Ended with nothing heard — if the session is still on, listen
     // again instead of going idle and forcing another tap. While Beeto
     // is speaking on iOS (no barge-in), wait for speech to finish
     // instead; the speech-finished callback restarts listening.
     if (voiceModeEnabled) {
-      const beetoIsSpeaking = currentTtsAudio || ("speechSynthesis" in window && speechSynthesis.speaking);
+      if (voiceOrbEl?.dataset.state === "paused") return; // waiting for a tap, don't loop
+      const beetoIsSpeaking =
+        currentTtsAudio ||
+        (currentlySpokenText && "speechSynthesis" in window && speechSynthesis.speaking);
       if (!bargeInEnabled && beetoIsSpeaking) return;
-      startCommandListening();
+      // Small pause so a "heard nothing" ending doesn't restart in a tight loop.
+      setTimeout(() => {
+        if (voiceModeEnabled && !commandRecognitionActive && voiceOrbEl?.dataset.state !== "paused") {
+          startCommandListening();
+        }
+      }, 300);
     } else {
       setVoiceStatus("idle");
     }
@@ -645,7 +713,7 @@ if (SpeechRecognitionCtor) {
   function unlockAudioPlayback() {
     try {
       if ("speechSynthesis" in window) {
-        const warm = new SpeechSynthesisUtterance(" ");
+        const warm = new SpeechSynthesisUtterance("ok"); // real text: a blank one may not unlock iOS
         warm.volume = 0;
         speechSynthesis.speak(warm);
       }
@@ -653,6 +721,16 @@ if (SpeechRecognitionCtor) {
 
     primeTtsAudioElement();
   }
+
+  // If the phone refuses to restart the mic on its own, the orb turns grey
+  // and says "Tap to talk". Tapping it is a real gesture, so it always works.
+  voiceOrbEl.addEventListener("click", () => {
+    if (!voiceModeEnabled || voiceOrbEl.dataset.state !== "paused") return;
+    unlockAudioPlayback();
+    setVoiceStatus("listening");
+    commandProducedResult = false;
+    startCommandListening(true);
+  });
 
   wakeToggleBtn.addEventListener("click", () => {
     voiceModeEnabled = !voiceModeEnabled;
@@ -663,6 +741,8 @@ if (SpeechRecognitionCtor) {
       setVoiceStatus("listening");
       startMicLevelMeter();
       commandProducedResult = false;
+      lastListenStartedByTap = true;
+      lastHeardTranscript = "";
       try {
         commandRecognition.start();
         commandRecognitionActive = true;
@@ -706,7 +786,8 @@ function setVoiceStatus(state) {
   const labels = {
     listening: "Listening…",
     thinking: "Thinking…",
-    speaking: "Speaking…"
+    speaking: "Speaking…",
+    paused: "Tap to talk"
   };
   if (voiceStatusLabelEl) voiceStatusLabelEl.textContent = labels[state] || "";
 }
@@ -718,7 +799,7 @@ function setVoiceStatus(state) {
 // Skipped entirely on iOS (see the note near the top of voice mode).
 // --------------------------------------------------------------
 async function startMicLevelMeter() {
-  if (isIOS) return;
+  if (isMobileDevice) return; // phones only let one thing use the mic at a time
   if (micStream) return; // already running
 
   try {
