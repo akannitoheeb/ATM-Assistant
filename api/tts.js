@@ -103,7 +103,7 @@ module.exports = async function (req, res) {
     if (!elevenResponse.ok) {
       const errText = await elevenResponse.text();
       console.error("ElevenLabs TTS error:", elevenResponse.status, errText);
-      return res.status(elevenResponse.status).json({ error: "TTS generation failed." });
+      return res.status(elevenResponse.status === 401 ? 502 : elevenResponse.status).json({ error: "TTS generation failed." });
     }
 
     const arrayBuffer = await elevenResponse.arrayBuffer();
