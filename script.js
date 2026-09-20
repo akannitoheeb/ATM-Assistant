@@ -1,5 +1,5 @@
 // ============================================================
-// Beeto — Stage 4 (guest mode + accounts)
+// Beeto — Stage 4 (guest mode + accounts) + hands-free voice mode
 //
 // Chat is visible immediately, even before logging in. Guests get
 // 1 free message per day (tracked by IP, on the server). Once
@@ -144,28 +144,17 @@ function stopRecordingUI() {
 // auto-playback below); toggleSpeak() wraps it for the button's
 // on/off label behaviour.
 //
-// Tries Beeto's actual ElevenLabs voice first (higher quality, a
-// real chosen voice rather than whatever robotic default the OS
-// ships), via the /api/tts endpoint. That endpoint requires a
-// logged-in user (ElevenLabs bills per character generated, same
-// cost-gating reasoning as the send_email tool), so guests — and
-// anyone whose request fails for any other reason: no API key set,
-// network error, ElevenLabs itself erroring — transparently fall
-// back to the browser's free built-in SpeechSynthesis instead of
-// going silent.
+// Tries Beeto's ElevenLabs voice first via /api/tts (logged-in
+// users only, because ElevenLabs bills per character). Guests, and
+// anyone whose request fails for any reason, fall back to the
+// browser's free built-in SpeechSynthesis instead of going silent.
 // --------------------------------------------------------------
 let currentTtsAudio = null; // the ElevenLabs <audio> currently playing, if any
 
-// A single, reused <audio> element for all ElevenLabs playback, rather
-// than a fresh `new Audio()` each time. This matters specifically for
-// Safari/iOS: once one particular <audio> element has been played
-// inside a genuine user-gesture handler (even silently, see
-// primeTtsAudioElement below), that SAME element keeps permission to
-// play again later from async code (after a network request) for the
-// rest of the page session — but a brand-new Audio() object created
-// later does not inherit that permission and gets silently blocked.
-// Chrome is far more lenient here, which is why this was only ever
-// showing up on the phone.
+// A single, reused <audio> element for all ElevenLabs playback.
+// Safari/iOS only lets an <audio> element play from async code if
+// that SAME element was already played inside a real tap handler,
+// so a fresh `new Audio()` each time gets silently blocked.
 let ttsAudioEl = null;
 
 function ensureTtsAudioElement() {
@@ -176,46 +165,55 @@ function ensureTtsAudioElement() {
   return ttsAudioEl;
 }
 
+// Because the <audio> element is reused, handlers from a previous
+// playback would otherwise still be attached and could fire for the
+// NEXT clip (including the silent "unlock" clip below).
+function resetTtsHandlers(el) {
+  if (!el) return;
+  el.onended = null;
+  el.onerror = null;
+}
+
 // Call synchronously, inside a real tap handler, before any `await` —
 // this is what actually "unlocks" ttsAudioEl for Safari.
 function primeTtsAudioElement() {
   try {
     const el = ensureTtsAudioElement();
+    resetTtsHandlers(el);
     el.src = "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     el.play().catch(() => {});
   } catch (error) {}
 }
 
+// Phones almost always have the speaker close to the mic and no
+// headphone detection in browsers, so barge-in (listening WHILE
+// Beeto talks) is only enabled off iOS. On iOS, listening resumes
+// as soon as Beeto finishes speaking instead.
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const bargeInEnabled = !isIOS;
+
 // The plain text Beeto is currently speaking aloud, if any — used to
 // tell a genuine interruption apart from the mic just picking up
-// Beeto's own voice through the speaker (a real risk without
-// headphones, since the Web Speech API gives no way to suppress that
-// from here). See looksLikeEcho() below, used by commandRecognition's
-// barge-in check.
+// Beeto's own voice through the speaker. See looksLikeEcho() below.
 let currentlySpokenText = null;
 
 function looksLikeEcho(transcript) {
   const heard = transcript.trim().toLowerCase();
   if (!currentlySpokenText) return false;
-  // Not an exact-substring-only check — recognized speech (especially
-  // an early interim result) rarely lines up word-for-word with the
-  // source text, so this checks how much of what was heard actually
-  // shows up in what's being spoken, word by word. Words of length 1
-  // are excluded (too likely to coincidentally match) but 2-letter
-  // words are kept — dropping them was leaving very short interim
-  // fragments (exactly what an echo's first fragment looks like) with
-  // nothing to compare, defaulting to "not an echo" and cutting Beeto
-  // off on essentially no evidence.
+  // Word-by-word overlap rather than an exact substring check, since
+  // recognized speech rarely lines up exactly with the source text.
   const spoken = currentlySpokenText.toLowerCase();
   const heardWords = heard.split(/\s+/).filter(w => w.length > 1);
-  if (heardWords.length === 0) return true; // nothing substantial enough to judge — treat as inconclusive, not as a confirmed interruption
+  if (heardWords.length === 0) return true; // nothing substantial to judge — treat as inconclusive
   const matchedWords = heardWords.filter(w => spoken.includes(w));
-  return matchedWords.length / heardWords.length > 0.5; // most of what it heard is also in what's playing
+  return matchedWords.length / heardWords.length > 0.5;
 }
 
 function stopAllSpeech() {
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   if (currentTtsAudio) {
+    resetTtsHandlers(currentTtsAudio);
     currentTtsAudio.pause();
     currentTtsAudio.currentTime = 0;
     currentTtsAudio = null;
@@ -223,43 +221,66 @@ function stopAllSpeech() {
   currentlySpokenText = null;
 }
 
+// Turns a markdown-ish reply into something that sounds natural when
+// read aloud: no code blocks, URLs, bullets, pipes, or emoji.
+function cleanForSpeech(text) {
+  return String(text || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/^\s*[-•]\s+/gm, "")
+    .replace(/[*_#`>|~]/g, " ")
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function speakText(text, onDone) {
   stopAllSpeech();
-  const plainText = text.replace(/[*_#`]/g, ""); // strip stray markdown before speaking
+  const plainText = cleanForSpeech(text);
+  if (!plainText) {
+    if (onDone) onDone();
+    return;
+  }
   currentlySpokenText = plainText;
 
-  try {
-    const authHeaders = await getAuthHeaders();
-    const response = await fetch(TTS_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ text: plainText })
-    });
+  // Guests would just get a 401 from /api/tts, so skip the round trip
+  // and go straight to the free browser voice.
+  if (!isGuest) {
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(TTS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ text: plainText })
+      });
 
-    if (!response.ok) throw new Error("TTS request failed: " + response.status);
+      if (!response.ok) throw new Error("TTS request failed: " + response.status);
 
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = ensureTtsAudioElement(); // reuse the primed element — see comment above
-    audio.src = url;
-    currentTtsAudio = audio;
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = ensureTtsAudioElement(); // reuse the primed element
+      resetTtsHandlers(audio);
+      audio.src = url;
+      currentTtsAudio = audio;
 
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      if (currentTtsAudio === audio) currentTtsAudio = null;
-      currentlySpokenText = null;
-      if (onDone) onDone();
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      if (currentTtsAudio === audio) currentTtsAudio = null;
-      speakWithBrowserVoice(plainText, onDone);
-    };
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        if (currentTtsAudio === audio) currentTtsAudio = null;
+        currentlySpokenText = null;
+        if (onDone) onDone();
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        if (currentTtsAudio === audio) currentTtsAudio = null;
+        speakWithBrowserVoice(plainText, onDone);
+      };
 
-    await audio.play();
-    return;
-  } catch (error) {
-    console.error("Beeto voice — ElevenLabs TTS unavailable, falling back to browser voice:", error);
+      await audio.play();
+      return;
+    } catch (error) {
+      console.error("Beeto voice — ElevenLabs TTS unavailable, falling back to browser voice:", error);
+    }
   }
 
   speakWithBrowserVoice(plainText, onDone);
@@ -272,7 +293,7 @@ function speakWithBrowserVoice(plainText, onDone) {
     return;
   }
 
-  currentlySpokenText = plainText; // re-set here too, in case this was reached via the ElevenLabs error fallback above
+  currentlySpokenText = plainText; // re-set in case this was reached via the ElevenLabs error fallback
   const utterance = new SpeechSynthesisUtterance(plainText);
 
   if (settings.voiceURI) {
@@ -295,7 +316,7 @@ function toggleSpeak(text, btn) {
 
   if (wasThisOneSpeaking) return; // this button's own click was the "stop" tap
 
-  primeTtsAudioElement(); // synchronous, right inside this tap — required for Safari, see comment above
+  primeTtsAudioElement(); // synchronous, right inside this tap — required for Safari
   btn.textContent = "Stop";
   speakText(text, () => { btn.textContent = "Listen"; });
 }
@@ -327,50 +348,33 @@ if ("speechSynthesis" in window) {
 // --------------------------------------------------------------
 // Voice mode — tap once to start a hands-free conversation.
 //
-// This used to try to listen continuously in the background for a
-// "Hey Beeto" wake phrase. That's been removed: the Web Speech API's
-// continuous-listening mode isn't reliably supported for real hotword
-// detection on mobile Chrome or Safari, and it failed the same way on
-// both platforms — the signature of a platform limitation, not a bug
-// worth chasing further with more retry logic. True hands-free
-// wake-word would need either a native app, or a dedicated on-device
-// keyword-spotting engine (e.g. Picovoice Porcupine) instead of the
-// browser's built-in recognition.
+// Tap the button once, speak, it sends automatically, the reply is
+// read back, and it automatically starts listening again. Only the
+// first tap (and the final tap to end the session) are manual. It
+// relies only on ordinary single-utterance recognition, looped.
+// (A true "Hey Beeto" wake word isn't reliable with the browser's
+// built-in recognition; that would need a native app or an
+// on-device keyword engine like Picovoice Porcupine.)
 //
-// What it does instead: tap the button once, speak, it sends
-// automatically, the reply is read back, and it automatically starts
-// listening again — so only the first tap (and the final tap to end
-// the session) are manual. This relies only on ordinary
-// single-utterance recognition, the same reliable mode the original
-// tap-to-talk mic button already used, just looped.
-//
-// Listening is deliberately paused while Beeto's own reply is being
-// spoken aloud — it only starts listening again once speech finishes,
-// so the mic doesn't pick up Beeto's own voice out of the speakers
-// and mistake it for the next thing to send.
-//
-// Voice mode does not persist across reloads or turn on by itself —
-// it always starts off, and requires an explicit tap, since silently
-// re-enabling a live microphone on page load would be a bad surprise.
+// Voice mode never persists across reloads or turns on by itself —
+// silently re-enabling a live microphone on page load would be a
+// bad surprise.
 // --------------------------------------------------------------
 let voiceModeEnabled = false; // "voice session" active — tap-to-start/stop, not a wake word
 
 let commandProducedResult = false; // tracks whether the current listening pass actually heard something
-let commandRecognitionActive = false; // tracks whether commandRecognition is currently running, so barge-in and the normal resume-after-speaking flow never both call .start() at once
-let startCommandListening = () => {}; // reassigned below once commandRecognition exists; declared here (rather than nested inside the if-block) so handleSend can safely call it regardless of block-scoping behaviour
+let commandRecognitionActive = false; // so barge-in and the normal resume flow never both call .start() at once
+let startCommandListening = () => {}; // reassigned below once commandRecognition exists
 let commandRecognition = null;
 let wakeToggleBtn = null;
 let voiceOrbEl = null;
 let voiceOrbCircle = null;
 let voiceStatusLabelEl = null;
 
-// Real-time mic level metering, kept separate from commandRecognition
-// itself — SpeechRecognition never exposes raw audio volume, so
-// getting the audio-reactive size-pulsing the orb needs (the actual
-// thing that makes Siri/Gemini's orb feel "alive," not just
-// decorative) requires its own getUserMedia stream run through a Web
-// Audio AnalyserNode. This reuses the mic permission already granted
-// for speech recognition, so it doesn't prompt the person a second time.
+// Real-time mic level metering for the audio-reactive orb, separate
+// from commandRecognition (SpeechRecognition never exposes volume).
+// Skipped on iOS, where a second live mic stream alongside speech
+// recognition commonly breaks recognition or mutes playback.
 let micStream = null;
 let micAudioContext = null;
 let micAnalyser = null;
@@ -445,30 +449,14 @@ if (SpeechRecognitionCtor) {
   wakeToggleBtn.title = "Tap to start a hands-free voice conversation";
   micBtn.insertAdjacentElement("afterend", wakeToggleBtn);
 
-  // A wake-phrase toggle ("Hey Beeto") used to live here, listening
-  // continuously in the background. It's gone on purpose: the Web
-  // Speech API's "continuous" mode isn't reliably supported for
-  // always-on hotword detection on mobile Chrome or Safari — it
-  // failed the same way on both platforms, which is the signature of
-  // a platform limitation, not a bug worth chasing further here. True
-  // hands-free wake-word would need either a native app or a
-  // dedicated on-device keyword-spotting engine (e.g. Picovoice
-  // Porcupine) instead of the browser's built-in speech recognition.
-  //
-  // What replaces it: tap once to start a session, speak, it
-  // auto-sends and auto-speaks the reply, then automatically starts
-  // listening again — so only the very first tap is manual. This
-  // relies only on ordinary single-utterance recognition, the same
-  // reliable mode the original tap-to-talk mic button already used.
   commandRecognition = new SpeechRecognitionCtor();
   commandRecognition.continuous = false;
-  commandRecognition.interimResults = true; // needed for barge-in: react the instant speech starts, not only once a full utterance is captured
+  commandRecognition.interimResults = true; // needed for barge-in: react the instant speech starts
   commandRecognition.lang = "en-GB";
 
-  // Centralizes starting commandRecognition so barge-in (started while
-  // Beeto is still speaking) and the normal "resume listening" calls
-  // elsewhere never both try to start it at once — Safari/Chrome both
-  // throw if .start() is called while a session is already running.
+  // Centralizes starting commandRecognition so barge-in and the normal
+  // "resume listening" calls never both try to start it at once —
+  // Safari/Chrome both throw if .start() is called while running.
   startCommandListening = function () {
     if (commandRecognitionActive) return;
     try {
@@ -484,29 +472,14 @@ if (SpeechRecognitionCtor) {
     const transcript = result[0].transcript;
     const isBeetoTalking = currentTtsAudio || ("speechSynthesis" in window && speechSynthesis.speaking);
 
-    // Barge-in: the moment real speech is detected — even a partial,
-    // not-yet-final interim result — if Beeto is currently talking,
-    // cut it off right away. This is what makes interrupting feel
-    // instant instead of waiting for a full sentence to be captured
-    // first.
-    //
-    // Without headphones, the mic can pick up Beeto's own voice
-    // coming through the speaker and misread it as an interruption.
-    // The Web Speech API gives no way to suppress that at the source,
-    // so instead: check whether what was just heard actually matches
-    // what Beeto is currently saying (looksLikeEcho, above). If it
-    // does, treat it as the mic hearing itself and ignore it rather
-    // than cutting Beeto off over its own voice.
+    // Barge-in: if real speech is detected while Beeto is talking,
+    // cut it off right away. Without headphones the mic can hear
+    // Beeto's own voice, so first check whether what was heard
+    // matches what's currently being spoken (looksLikeEcho).
     if (isBeetoTalking) {
       const wordsHeardSoFar = transcript.trim().split(/\s+/).filter(Boolean).length;
       if (wordsHeardSoFar < 2) {
-        // A single short fragment is exactly what the leading edge of
-        // an echo looks like, and not enough to judge either way yet
-        // — wait for the next interim update instead of reacting to
-        // it. A real interruption will keep producing more words
-        // within the next moment anyway, so this costs a fraction of
-        // a second, not real responsiveness.
-        return;
+        return; // one short fragment is what the start of an echo looks like; wait for more
       }
       if (looksLikeEcho(transcript)) {
         return;
@@ -524,10 +497,6 @@ if (SpeechRecognitionCtor) {
   };
 
   commandRecognition.onerror = (event) => {
-    // Logged with a distinct prefix on purpose — if voice mode is
-    // still misbehaving, open the browser console and look for lines
-    // starting with "Beeto voice mode" to see exactly which native
-    // error code is actually firing.
     console.error("Beeto voice mode — recognition error:", event.error);
     commandRecognitionActive = false;
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
@@ -543,32 +512,27 @@ if (SpeechRecognitionCtor) {
       stopMicLevelMeter();
       alert("No microphone was found on this device.");
     }
-    // "no-speech" / "aborted" are recoverable — onend's own retry
-    // below handles those by just listening again.
+    // "no-speech" / "aborted" are recoverable — onend's retry handles those.
   };
 
   commandRecognition.onend = () => {
     commandRecognitionActive = false;
 
     if (commandProducedResult) {
-      // A result came in, which already triggered chatForm.requestSubmit()
-      // above — handleSend now owns the flow (thinking → speaking →
-      // relisten), so don't restart listening again here or two
-      // recognition passes would race each other.
+      // A result came in and already triggered chatForm.requestSubmit();
+      // handleSend now owns the flow (thinking → speaking → relisten).
       commandProducedResult = false;
       return;
     }
 
-    // Ended with nothing heard (silence, or a recoverable error) — if
-    // the session is still on, just listen again instead of going
-    // idle and forcing another tap.
-
+    // Ended with nothing heard — if the session is still on, listen
+    // again instead of going idle and forcing another tap. While Beeto
+    // is speaking on iOS (no barge-in), wait for speech to finish
+    // instead; the speech-finished callback restarts listening.
     if (voiceModeEnabled) {
-      try {
-        startCommandListening();
-      } catch (error) {
-        console.error("Beeto voice mode — could not restart listening:", error);
-      }
+      const beetoIsSpeaking = currentTtsAudio || ("speechSynthesis" in window && speechSynthesis.speaking);
+      if (!bargeInEnabled && beetoIsSpeaking) return;
+      startCommandListening();
     } else {
       setVoiceStatus("idle");
     }
@@ -577,16 +541,9 @@ if (SpeechRecognitionCtor) {
   // --------------------------------------------------------------
   // Audio unlock — iOS Safari (and some Android browsers) only allow
   // starting audio playback from directly within a user-gesture
-  // handler (a real tap). speakText() fires later, after a network
-  // round trip to Groq for a reply — by then, the original tap's
-  // "permission window" for starting audio may have already expired,
-  // which is exactly what produces "everything else works, but
-  // nothing plays out loud." Priming the shared TTS <audio> element
-  // (see primeTtsAudioElement above) and a near-silent speech
-  // utterance synchronously, right here inside the tap that turns
-  // voice mode on, unlocks audio playback on that SAME element for
-  // the rest of this page session, so the later async-triggered
-  // speakText() call is actually allowed to produce sound.
+  // handler. speakText() fires later, after a network round trip, so
+  // the shared <audio> element and speech synthesis are primed here,
+  // inside the tap that turns voice mode on.
   // --------------------------------------------------------------
   function unlockAudioPlayback() {
     try {
@@ -605,7 +562,7 @@ if (SpeechRecognitionCtor) {
     updateVoiceModeUI();
 
     if (voiceModeEnabled) {
-      unlockAudioPlayback(); // must happen synchronously, right inside this tap — see comment below
+      unlockAudioPlayback(); // must happen synchronously, right inside this tap
       setVoiceStatus("listening");
       startMicLevelMeter();
       commandProducedResult = false;
@@ -613,13 +570,6 @@ if (SpeechRecognitionCtor) {
         commandRecognition.start();
         commandRecognitionActive = true;
       } catch (error) {
-        // Fires immediately (synchronously) if, for example, the
-        // browser genuinely has no working speech recognition in this
-        // context despite the constructor existing, or mic permission
-        // was already denied at the OS level. Surfacing it directly
-        // instead of failing silently is the fastest way to tell
-        // "voice mode doesn't work here at all" apart from some other
-        // issue further down the flow.
         console.error("Beeto voice mode — could not start listening:", error);
         voiceModeEnabled = false;
         updateVoiceModeUI();
@@ -645,7 +595,7 @@ function updateVoiceModeUI() {
   wakeToggleBtn.title = voiceModeEnabled
     ? "Voice mode on — tap to end the conversation"
     : "Tap to start a hands-free voice conversation";
-  micBtn.disabled = voiceModeEnabled; // voice mode already owns the mic; avoid two recognitions fighting over it
+  micBtn.disabled = voiceModeEnabled; // voice mode already owns the mic
 }
 
 function setVoiceStatus(state) {
@@ -665,18 +615,19 @@ function setVoiceStatus(state) {
 }
 
 // --------------------------------------------------------------
-// Audio-reactive orb sizing — the part that actually makes it feel
-// like Siri/Gemini rather than a static icon: the orb visibly grows
-// and shrinks with how loud you're talking, in real time, while in
-// the "listening" state. During "thinking"/"speaking" this hands
-// control back to the CSS animations above instead, since nothing
-// meaningful is coming through the mic in those states.
+// Audio-reactive orb sizing — the orb grows and shrinks with how
+// loud you're talking while in the "listening" state. During
+// "thinking"/"speaking" the CSS animations take over instead.
+// Skipped entirely on iOS (see the note near the top of voice mode).
 // --------------------------------------------------------------
 async function startMicLevelMeter() {
+  if (isIOS) return;
   if (micStream) return; // already running
 
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
     micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
     const source = micAudioContext.createMediaStreamSource(micStream);
     micAnalyser = micAudioContext.createAnalyser();
@@ -701,11 +652,8 @@ async function startMicLevelMeter() {
     };
     tick();
   } catch (error) {
-    // Non-fatal: voice mode still works through SpeechRecognition
-    // itself, it just won't have the audio-reactive sizing — the orb
-    // will show its state colour and the CSS pulse/spin animation
-    // instead. Most likely cause: mic permission blocked, or a
-    // browser/context that doesn't support getUserMedia here.
+    // Non-fatal: voice mode still works through SpeechRecognition,
+    // the orb just won't react to volume.
     console.error("Beeto voice mode — mic level meter unavailable:", error);
   }
 }
@@ -861,10 +809,7 @@ function deleteProject(projectId) {
 }
 
 // --------------------------------------------------------------
-// Tools popup (replaces separate unlabeled icon buttons) — a
-// single "+" button that opens a labeled menu, same pattern as
-// Claude's attach menu. Lives above the input bar since the input
-// sits at the bottom of the screen.
+// Tools popup — a single "+" button that opens a labeled menu.
 // --------------------------------------------------------------
 const toolsBtn = document.getElementById("toolsBtn");
 const toolsPopup = document.getElementById("toolsPopup");
@@ -947,8 +892,7 @@ toolsCampaignItem.addEventListener("click", () => {
     includeLandingPage = false;
     includeRepurpose = false;
   } else {
-    // Campaign and sequence are mutually exclusive — a single message
-    // is either one email or a multi-email flow, not both.
+    // Campaign and sequence are mutually exclusive.
     sequenceMode = false;
   }
   userInput.placeholder = campaignMode
@@ -987,7 +931,6 @@ toolsSequenceItem.addEventListener("click", () => {
   }
   sequenceMode = !sequenceMode;
   if (sequenceMode) {
-    // Same mutual exclusion in the other direction.
     campaignMode = false;
     includeLandingPage = false;
     includeRepurpose = false;
@@ -1045,9 +988,7 @@ function resetCampaignMode() {
 // --------------------------------------------------------------
 // Guided onboarding — a 3-step wizard that pre-fills the Brand
 // Profile on a brand-new account's first login. Skippable at any
-// step. Writes straight into settings.brandProfile using the same
-// save path as the Settings modal, so nothing downstream needs to
-// know the data came from here instead of there.
+// step.
 // --------------------------------------------------------------
 const onboardingOverlay = document.getElementById("onboardingOverlay");
 const skipOnboardingBtn = document.getElementById("skipOnboardingBtn");
@@ -1069,10 +1010,7 @@ let onboardingStep = 1;
 function shouldShowOnboarding() {
   if (settings.onboarded) return false;
   const bp = settings.brandProfile || emptyBrandProfile();
-  // Only trigger for a genuinely empty profile — an account that
-  // already has brand info (e.g. restored from an older save, or
-  // filled in manually before this feature shipped) shouldn't be
-  // interrupted with a wizard asking for what it already has.
+  // Only trigger for a genuinely empty profile.
   return !(bp.name || bp.industry || bp.audience || bp.voice || bp.avoidWords || bp.sampleEmail);
 }
 
@@ -1254,10 +1192,10 @@ let privateSession = null; // in-memory only — never pushed to `sessions`, nev
 let currentAbortController = null; // lets the stop button cancel an in-flight request
 
 // --------------------------------------------------------------
-// Persistence across reloads — iOS Safari reloads background tabs from
-// scratch under memory pressure, which wipes all in-memory JS state.
-// These two small layers save just enough to localStorage that a fresh
-// reload can restore "where you were" instead of starting blank.
+// Persistence across reloads — iOS Safari reloads background tabs
+// from scratch under memory pressure, which wipes in-memory JS
+// state. These layers save just enough to localStorage to restore
+// "where you were".
 // --------------------------------------------------------------
 const LAST_ACTIVE_KEY = "atm_last_active";
 const DRAFT_KEY = "atm_draft_text";
@@ -1267,15 +1205,12 @@ function persistActiveState() {
   try {
     localStorage.setItem(LAST_ACTIVE_KEY, JSON.stringify({ activeId, activeProjectId }));
   } catch (error) {
-    // Private browsing etc. can throw here — losing "resume where I left
-    // off" is fine, it should never break the app itself.
+    // Losing "resume where I left off" is fine, it should never break the app.
   }
 }
 
 function restoreActiveState() {
-  // Always start from a clean default. If nothing valid is found below,
-  // this is what we fall back to — never leaves a stale in-memory value
-  // in place from whatever ran before this function was called.
+  // Always start from a clean default.
   activeProjectId = null;
   activeId = null;
 
@@ -1291,12 +1226,12 @@ function restoreActiveState() {
     const sessionStillExists = saved.activeId && sessions.some((s) => s.id === saved.activeId);
     activeId = sessionStillExists ? saved.activeId : null;
   } catch (error) {
-    // Corrupt or unavailable storage just falls back to the defaults set
-    // above — never lets a bad value crash the app.
+    // Corrupt or unavailable storage falls back to the defaults set above.
   }
 }
 
 function persistDraft() {
+  if (isPrivateMode) return; // private mode must never write anything typed to localStorage
   try {
     if (userInput.value) {
       localStorage.setItem(DRAFT_KEY, userInput.value);
@@ -1304,8 +1239,7 @@ function persistDraft() {
       localStorage.removeItem(DRAFT_KEY);
     }
   } catch (error) {
-    // Same reasoning as above — draft recovery is a nice-to-have, not
-    // something that should ever be allowed to break typing.
+    // Draft recovery is a nice-to-have, never something that should break typing.
   }
 }
 
@@ -1317,7 +1251,7 @@ function restoreDraft() {
       autoGrow();
     }
   } catch (error) {
-    // Ignore — worst case, the draft just doesn't come back.
+    // Worst case, the draft just doesn't come back.
   }
 }
 
@@ -1477,9 +1411,9 @@ authForm.addEventListener("submit", async (event) => {
     // and closes the modal via onLogin().
   } catch (error) {
     authError.textContent = friendlyAuthError(error.message);
+    authError.style.color = ""; // clear any green "reset link sent" colour from before
     authError.classList.remove("hidden");
     authForm.classList.add("shake");
-    upgradeBtn.classList.remove("hidden");
     setTimeout(() => authForm.classList.remove("shake"), 400);
   } finally {
     authSubmitBtn.disabled = false;
@@ -1523,8 +1457,7 @@ forgotPasswordBtn?.addEventListener("click", async () => {
 });
 
 // --------------------------------------------------------------
-// Google sign-in — its own top-level listener, not nested inside
-// the email/password submit handler.
+// Google sign-in — its own top-level listener.
 // --------------------------------------------------------------
 googleAuthBtn.addEventListener("click", async () => {
   authError.classList.add("hidden");
@@ -1689,8 +1622,7 @@ document.querySelectorAll(".currency-btn").forEach((btn) => {
 
 // --------------------------------------------------------------
 // Support this project ("Buy me a coffee") — a one-time, any-amount
-// payment via Flutterwave. Open to guests and logged-in users alike,
-// no account or subscription involved.
+// payment via Flutterwave. Open to guests and logged-in users alike.
 // --------------------------------------------------------------
 function openSupportModal() {
   supportError.classList.add("hidden");
@@ -1737,8 +1669,7 @@ supportSubmitBtn.addEventListener("click", async () => {
   supportSubmitBtn.disabled = true;
   try {
     // Guests have no session, so this only attaches an auth header
-    // when one exists — the backend doesn't require login for a
-    // one-time support payment.
+    // when one exists.
     const authHeaders = await getAuthHeaders();
     const response = await fetch("/api/create-support-payment", {
       method: "POST",
@@ -1787,10 +1718,10 @@ async function loadUserData() {
     settings.brandProfile = settings.brandProfile || emptyBrandProfile();
     settings.memories = settings.memories || [];
     settings.aiDisclosure = settings.aiDisclosure === undefined ? true : settings.aiDisclosure;
-    // Older accounts predate this flag entirely. shouldShowOnboarding()
-    // also checks whether the brand profile is actually empty, so this
-    // default alone won't re-trigger the wizard for anyone who already
-    // has brand info saved — only for genuinely blank, pre-feature profiles.
+    // Older accounts predate this flag. shouldShowOnboarding() also
+    // checks whether the brand profile is actually empty, so this
+    // default alone won't re-trigger the wizard for anyone who
+    // already has brand info saved.
     settings.onboarded = settings.onboarded === undefined ? false : settings.onboarded;
     settings.region = settings.region || "us";
     settings.voiceURI = settings.voiceURI || "";
@@ -1840,9 +1771,6 @@ function applyProStatusToUI(isActivePro) {
     // Already Pro — no need to dangle the upgrade prompt in front of them.
     upgradeBtn.classList.add("hidden");
 
-    // If they ever open the modal via another path, make sure it
-    // reflects reality instead of showing Free as current and Pro
-    // as purchasable again.
     const freeBtn = document.querySelector(".plan-card:not(.plan-card-pro) .plan-btn");
     const proCurrencyChoice = document.querySelector(".plan-card-pro .currency-choice");
     if (freeBtn) {
@@ -1970,10 +1898,9 @@ function applySettingsToForm() {
 }
 
 // --------------------------------------------------------------
-// Sidebar toggle — works the same way on desktop and mobile now.
-// Desktop: collapses the sidebar to width 0 (content stays mounted,
-// just visually hidden) and shows a small floating re-open tab.
-// Mobile: same off-canvas slide behaviour as before, plus a backdrop.
+// Sidebar toggle — works the same way on desktop and mobile.
+// Desktop: collapses the sidebar to width 0 and shows a small
+// floating re-open tab. Mobile: off-canvas slide plus a backdrop.
 // --------------------------------------------------------------
 function isMobileViewport() {
   return window.matchMedia("(max-width: 720px)").matches;
@@ -2014,18 +1941,15 @@ sidebarCloseBtn.addEventListener("click", closeSidebar);
 sidebarOpenBtn.addEventListener("click", openSidebar);
 sidebarBackdrop.addEventListener("click", closeSidebar);
 
-// Initial state: mobile starts closed (sidebar off-canvas by default
-// CSS, so show the open button); desktop starts open (sidebar has
-// neither "open" nor "collapsed" yet, so hide the open button).
+// Initial state: mobile starts closed, desktop starts open.
 if (isMobileViewport()) {
   sidebarOpenBtn.classList.remove("hidden");
 } else {
   sidebarOpenBtn.classList.add("hidden");
 }
 
-// If the viewport crosses the mobile/desktop breakpoint while the
-// sidebar happens to be in the "off" state for the other mode, make
-// sure it doesn't get stuck invisible with no way to reopen it.
+// If the viewport crosses the mobile/desktop breakpoint, make sure
+// the sidebar doesn't get stuck invisible with no way to reopen it.
 window.addEventListener("resize", () => {
   if (isMobileViewport()) {
     sidebar.classList.remove("collapsed");
@@ -2053,14 +1977,14 @@ newChatBtn.addEventListener("click", () => {
 // --------------------------------------------------------------
 // File attachments (images and plain text files)
 // --------------------------------------------------------------
-let pendingAttachments = []; // [{ kind: "image"|"text", name, data }]
+let pendingAttachments = []; // [{ kind: "image"|"text"|"loading", name, data }]
 const MAX_ATTACHMENTS = 8;
 
 // 8MB covers a large brand PDF or subscriber CSV without risking a
 // frozen tab on mobile Safari while it reads into memory.
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 // ~10k tokens' worth of text — keeps one attachment from silently
-// consuming a huge chunk of a message's Groq cost.
+// consuming a huge chunk of a message's cost.
 const MAX_EXTRACTED_CHARS = 40000;
 
 fileInput.addEventListener("change", async () => {
@@ -2258,8 +2182,7 @@ chatForm.addEventListener("submit", handleSend);
 
 // The send button doubles as a stop button while a request is in
 // flight (see setLoading). It's type="button" in the HTML so it
-// never auto-submits the form on its own — this handler decides
-// which action to take based on current state.
+// never auto-submits the form on its own.
 sendBtn.addEventListener("click", () => {
   if (isSending) {
     stopResponse();
@@ -2362,7 +2285,7 @@ async function handleSend(event) {
 
   const mode = campaignMode ? "campaign" : (sequenceMode ? "sequence" : undefined);
   const useWebSearch = webSearchMode;
-  let voiceWillRespond = false; // set true once speakText() has been kicked off below, so `finally` knows not to resume wake listening early
+  let voiceWillRespond = false; // set true once speakText() has been kicked off, so `finally` knows not to resume listening early
 
   try {
     const result = await callGroqAPI(session.messages, mode, useWebSearch, undefined, currentAbortController.signal);
@@ -2392,8 +2315,8 @@ async function handleSend(event) {
       saveUserData();
       renderActiveChat();
     } else {
-            session.messages.push({ role: "assistant", content: result.reply, sources: result.sources, suggestions: result.suggestions });
-            
+      session.messages.push({ role: "assistant", content: result.reply, sources: result.sources, suggestions: result.suggestions });
+
       if (result.memory) {
         settings.memories = settings.memories || [];
         const FREE_MEMORY_CAP = 10;
@@ -2408,19 +2331,17 @@ async function handleSend(event) {
       if (voiceModeEnabled) {
         voiceWillRespond = true;
         setVoiceStatus("speaking");
-        // Start listening immediately, in parallel with playback —
-        // this is what makes barge-in possible. commandRecognition's
-        // own onresult handler (above) is what actually notices you've
-        // started talking and cuts Beeto off; this call just makes
-        // sure the mic is already live and ready the instant speaking
-        // starts, not only after it ends.
+
+        // Barge-in (off on iOS): start listening in parallel with
+        // playback so commandRecognition's onresult can notice you
+        // talking over Beeto and cut it off.
         commandProducedResult = false;
-        startCommandListening();
+        if (bargeInEnabled) startCommandListening();
+
         speakText(result.reply, () => {
           if (voiceModeEnabled) {
-            // If barge-in already cut this speech short, commandRecognition
-            // is very likely already running — startCommandListening()
-            // is a no-op in that case rather than throwing.
+            // startCommandListening() is a no-op if barge-in already
+            // has recognition running.
             setVoiceStatus("listening");
             startCommandListening();
           } else {
@@ -2436,8 +2357,7 @@ async function handleSend(event) {
     if (typingIndicator) typingIndicator.remove();
 
     if (error.name === "AbortError") {
-      // User hit stop — nothing more to do, the partial request is
-      // simply discarded. No error bubble, no retry.
+      // User hit stop — nothing more to do, the request is simply discarded.
     } else if (error.code === "GUEST_LIMIT") {
       session.messages.pop();
       renderActiveChat();
@@ -2458,9 +2378,7 @@ async function handleSend(event) {
 
     // Campaign/sequence replies, errors, and aborts never trigger
     // speakText() above, so nothing will resume listening on its own
-    // in those cases — do it here instead. When a normal reply IS
-    // being spoken, listening was already started above (that's what
-    // enables barge-in), so skip it here to avoid double-starting.
+    // in those cases — do it here instead.
     if (voiceModeEnabled && !voiceWillRespond) {
       setVoiceStatus("listening");
       commandProducedResult = false;
@@ -2513,7 +2431,9 @@ async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, sign
       includeRepurpose: mode === "campaign" ? repurposeFlag : undefined,
       sequenceLength: mode === "sequence" ? sequenceLength : undefined,
       webSearch: isStructuredMode ? undefined : Boolean(useWebSearch),
-      privateMode: Boolean(isPrivateMode)
+      privateMode: Boolean(isPrivateMode),
+      // Tells the server to answer in short, speakable sentences.
+      voiceMode: !isStructuredMode && Boolean(voiceModeEnabled)
     }),
     signal
   });
@@ -2537,7 +2457,7 @@ async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, sign
   }
 
   if (!data.reply) throw new Error("No text returned from the API.");
-    return { reply: data.reply.trim(), sources: data.sources || [], memory: data.memory || null, suggestions: Array.isArray(data.suggestions) ? data.suggestions : [] };
+  return { reply: data.reply.trim(), sources: data.sources || [], memory: data.memory || null, suggestions: Array.isArray(data.suggestions) ? data.suggestions : [] };
 }
 
 // --------------------------------------------------------------
@@ -2565,10 +2485,8 @@ function renderSidebar() {
     item.className = "history-item" + (session.id === activeId ? " active" : "");
 
     // Click handler lives on `item` — the same element that carries the
-    // :hover CSS rule — rather than on the inner label span. iOS Safari
-    // requires a tap-to-click target to match its hover target, or the
-    // first tap only "hovers" and a second tap is needed to actually
-    // fire the click. This is what fixes "double tap to open a chat".
+    // :hover CSS rule. iOS Safari needs a tap target to match its hover
+    // target, or the first tap only "hovers" and a second is needed.
     item.addEventListener("click", () => {
       activeId = session.id;
       persistActiveState();
@@ -2626,8 +2544,7 @@ function handleHistoryMenu(sessionId) {
 
 // How close to the bottom (in px) counts as "still at the bottom",
 // so a forced scroll never fires while the user has scrolled up to
-// read earlier messages — this is what fixes "can't scroll up while
-// the AI is typing".
+// read earlier messages.
 const SCROLL_NEAR_BOTTOM_PX = 80;
 
 function isChatNearBottom() {
@@ -2671,8 +2588,8 @@ function renderActiveChat(options = {}) {
   });
 
   // Always jump to bottom the first time a chat is opened / re-rendered
-  // in full (switching sessions, sending a new message) — the "stay put
-  // while typing" behaviour only applies to the token-by-token effect.
+  // in full — the "stay put while typing" behaviour only applies to the
+  // token-by-token effect.
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
@@ -2803,9 +2720,8 @@ function buildSourcesRow(sources) {
   return row;
 }
 
-// Tappable follow-up suggestions under the most recent assistant reply,
-// the same idea as ChatGPT/Claude's suggestion chips. Only shown on the
-// last message so old suggestions don't linger once the chat has moved on.
+// Tappable follow-up suggestions under the most recent assistant reply.
+// Only shown on the last message so old suggestions don't linger.
 function buildSuggestionsRow(suggestions) {
   const row = document.createElement("div");
   row.className = "suggestions-row";
@@ -2877,8 +2793,7 @@ function campaignToText(campaign) {
   return parts.join("\n");
 }
 
-// Client-side file download — no backend involved. Builds a Blob from
-// plain text and triggers a normal browser download via a throwaway <a>.
+// Client-side file download — no backend involved.
 function downloadTextFile(filename, content) {
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -2898,8 +2813,7 @@ function slugifyFilename(text, fallback) {
 }
 
 // Flattens a sequence into copyable plain text — each email in full,
-// separated by its step number and send delay so the pacing stays
-// legible outside the app (e.g. pasted into an ESP or a doc).
+// separated by its step number and send delay.
 function sequenceToText(sequence) {
   const parts = [sequence.sequence_name || "Email sequence", ""];
 
@@ -3043,10 +2957,7 @@ function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, is
 
   // --------------------------------------------------------------
   // In-place refinement — only on the most recent campaign card, so
-  // there's never ambiguity about which version of the campaign is
-  // "current." Clicking a button re-generates the campaign in place
-  // (same card, same position in the chat) rather than appending a
-  // new one below it.
+  // there's never ambiguity about which version is "current."
   // --------------------------------------------------------------
   if (isLast && typeof messageIndex === "number") {
     const refineRow = document.createElement("div");
@@ -3083,17 +2994,9 @@ function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, is
 }
 
 // --------------------------------------------------------------
-// Re-generates an existing campaign card in place. Sends the prior
-// conversation up to and including the original campaign, plus a
-// one-off refine instruction, back through the same structured
-// campaign endpoint — so it's the exact same JSON shape and
-// deliverability check as a fresh campaign, just steered by the
-// refine instruction instead of the user's original brief.
-//
-// The refine instruction itself is NOT saved into session.messages
-// — only the updated campaign fields on the existing message are.
-// That's what keeps this "in place" rather than adding a new user
-// turn + a new card underneath.
+// Re-generates an existing campaign card in place. The refine
+// instruction itself is NOT saved into session.messages — only the
+// updated campaign fields on the existing message are.
 // --------------------------------------------------------------
 async function refineCampaign(messageIndex, instruction, clickedBtn, refineRow, refineError) {
   const session = getActiveSession();
@@ -3150,9 +3053,8 @@ async function refineCampaign(messageIndex, instruction, clickedBtn, refineRow, 
 }
 
 // Renders a full sequence as one card containing a collapsible
-// section per email (native <details>, so no extra JS state needed
-// to track which are open) — each with its own deliverability
-// warnings, matching the single-campaign card's warning style.
+// section per email (native <details>) — each with its own
+// deliverability warnings.
 function addSequenceCardToDOM(sequence, warningsPerEmail, aiDisclosure) {
   const wrapper = document.createElement("div");
   wrapper.className = "message assistant";
@@ -3185,9 +3087,19 @@ function addSequenceCardToDOM(sequence, warningsPerEmail, aiDisclosure) {
     details.className = "sequence-email";
     details.open = i === 0; // first email expanded by default, rest collapsed
 
+    // Built with textContent (not innerHTML) so model output can never inject markup.
     const summary = document.createElement("summary");
     summary.className = "sequence-email-summary";
-    summary.innerHTML = `<span class="sequence-step-badge">Email ${email.step_number}</span> ${email.purpose || ""} <span class="sequence-delay">· ${email.send_delay || ""}</span>`;
+
+    const stepBadge = document.createElement("span");
+    stepBadge.className = "sequence-step-badge";
+    stepBadge.textContent = `Email ${email.step_number}`;
+
+    const delayEl = document.createElement("span");
+    delayEl.className = "sequence-delay";
+    delayEl.textContent = `· ${email.send_delay || ""}`;
+
+    summary.append(stepBadge, document.createTextNode(` ${email.purpose || ""} `), delayEl);
     details.appendChild(summary);
 
     const emailBody = document.createElement("div");
@@ -3281,8 +3193,7 @@ function campaignField(label, value, isBody = false) {
 
 // --------------------------------------------------------------
 // Typewriter effect — only auto-scrolls while the user is already
-// at (or near) the bottom of the chat log, so scrolling up to read
-// older messages while the AI is still "typing" is never fought.
+// at (or near) the bottom of the chat log.
 // --------------------------------------------------------------
 function typeWriterEffect(el, fullText, speedMs = 16) {
   const tokens = fullText.split(/(\s+)/);
@@ -3300,7 +3211,7 @@ function typeWriterEffect(el, fullText, speedMs = 16) {
       setTimeout(step, speedMs);
     } else {
       // Only render math once typing is fully done — mid-typing LaTeX
-      // is incomplete/garbled and would flash broken output.
+      // is incomplete and would flash broken output.
       renderMathIn(el);
     }
   }
@@ -3316,9 +3227,8 @@ function getUserInitial() {
 
 // --------------------------------------------------------------
 // Math rendering — KaTeX auto-render, applied after markdown has
-// already turned the raw text into HTML. Safe to call even before
-// the KaTeX scripts (loaded with `defer`) have finished loading;
-// it just silently does nothing until then.
+// already turned the raw text into HTML. Safe to call before the
+// KaTeX scripts have finished loading; it just does nothing.
 // --------------------------------------------------------------
 function renderMathIn(el) {
   if (!window.renderMathInElement) return;
@@ -3354,17 +3264,11 @@ function splitTableCells(line) {
 }
 
 function renderMarkdown(text) {
-  // Pull multi-line display-math blocks ($$...$$ or \[...\]) out before the
-  // line-by-line paragraph splitting below runs. That loop wraps each line
-  // in its own <p>, which tears a block like:
-  //   \[
-  //   D = 1.5 \times 10^{8}
-  //   \]
-  // into three separate paragraphs, so KaTeX never finds the opening and
-  // closing delimiter together and the raw LaTeX shows up unrendered.
-  // Swapping each block for a single-line placeholder keeps it intact
-  // through the split, then it's restored (still one contiguous chunk)
-  // right before returning.
+  // Pull multi-line display-math blocks ($$...$$ or \[...\]) out before
+  // the line-by-line paragraph splitting below runs, otherwise each line
+  // gets its own <p> and KaTeX never sees the opening and closing
+  // delimiter together. Each block is swapped for a single-line
+  // placeholder, then restored right before returning.
   const mathBlocks = [];
   const withPlaceholders = text.replace(
     /\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$/g,
@@ -3428,7 +3332,7 @@ function renderMarkdown(text) {
     }
 
     const headingMatch = line.match(/^\s*(#{1,4})\s+(.*)/);
-    const quoteMatch = line.match(/^\s*&gt;\s?(.*)/); // note: matches &gt; since escaping already ran
+    const quoteMatch = line.match(/^\s*&gt;\s?(.*)/); // matches &gt; since escaping already ran
     const numberedMatch = line.match(/^\s*\d+[\.\)]\s+(.*)/);
     const bulletMatch = line.match(/^\s*[-*]\s+(.*)/);
 
@@ -3506,4 +3410,3 @@ function getActiveSession() {
 renderActiveChat();
 renderToolsPopupState();
 restoreDraft();
-
