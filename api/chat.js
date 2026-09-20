@@ -55,6 +55,40 @@ const REPURPOSE_EXTRA_WEIGHT = 1;
 const SEQUENCE_MIN_LENGTH = 3;
 const SEQUENCE_MAX_LENGTH = 5;
 
+// Only the most recent messages are sent to Groq. Sending the whole
+// chat every time is what burns through the per-minute token limit.
+const MAX_HISTORY_MESSAGES = 10;
+
+// Cap on a normal chat reply. Groq counts the requested output size
+// against the per-minute token limit, so an uncapped request reserves
+// far more than it needs.
+const NORMAL_MAX_COMPLETION_TOKENS = 2048;
+
+// The suggestions/memory call only returns a few short strings.
+const EXTRAS_MAX_COMPLETION_TOKENS = 600;
+
+// Turns a Groq error into a friendly message for the browser instead of
+// leaking Groq's raw text (which includes your organization ID).
+function sendGroqError(res, status, data) {
+  if (status === 429) {
+    return res.status(429).json({
+      error: "Beeto is very busy right now. Please try again in a few seconds.",
+      code: "RATE_LIMIT"
+    });
+  }
+  return res.status(status).json({ error: data?.error?.message || "Groq API error" });
+}
+
+// Keeps the last N messages, and makes sure the slice starts with a
+// user message so the conversation still reads correctly.
+function trimHistory(messages) {
+  let recent = messages.slice(-MAX_HISTORY_MESSAGES);
+  while (recent.length > 1 && recent[0].role !== "user") {
+    recent = recent.slice(1);
+  }
+  return recent;
+}
+
 // Voice replies are spoken, so they should be short. Reasoning tokens
 // count toward the completion limit on gpt-oss, so this is generous
 // enough that a short spoken answer is never cut off to nothing.
@@ -545,7 +579,9 @@ async function extractPostReplyExtras(apiKey, userText, assistantText, existingM
           { role: "user", content: `User said: ${userText}\n\nAssistant replied: ${assistantText}` }
         ],
         response_format: POST_REPLY_SCHEMA,
-        reasoning_format: "hidden"
+        reasoning_format: "hidden",
+        reasoning_effort: "low",
+        max_completion_tokens: EXTRAS_MAX_COMPLETION_TOKENS
       })
     });
 
@@ -940,7 +976,8 @@ module.exports = async function (req, res) {
       return res.status(500).json({ error: "Server is missing GROQ_API_KEY. Set it in Vercel's dashboard." });
     }
 
-    const usingTextModel = !conversationHasImage(messages);
+    const recentMessages = trimHistory(messages);
+    const usingTextModel = !conversationHasImage(recentMessages);
     const isStructuredMode = mode === "campaign" || mode === "sequence";
     const clampedSequenceLength = Math.min(Math.max(sequenceLength || SEQUENCE_MIN_LENGTH, SEQUENCE_MIN_LENGTH), SEQUENCE_MAX_LENGTH);
 
@@ -982,7 +1019,7 @@ module.exports = async function (req, res) {
 
     const conversationMessages = [
       { role: "system", content: systemContent },
-      ...messages
+      ...recentMessages
     ];
 
     // Voice replies: low reasoning effort (faster first word) and a
@@ -990,7 +1027,9 @@ module.exports = async function (req, res) {
     // doesn't take these parameters.
     const voiceTuning = isVoiceRequest && usingTextModel
       ? { reasoning_effort: "low", max_completion_tokens: VOICE_MAX_COMPLETION_TOKENS }
-      : {};
+      : (!isStructuredMode && usingTextModel
+          ? { max_completion_tokens: NORMAL_MAX_COMPLETION_TOKENS }
+          : {});
 
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -1012,7 +1051,7 @@ module.exports = async function (req, res) {
 
     if (!groqResponse.ok) {
       console.error("Groq API error:", groqResponse.status, JSON.stringify(data));
-      return res.status(groqResponse.status).json({ error: data.error?.message || "Groq API error" });
+      return sendGroqError(res, groqResponse.status, data);
     }
 
     // --------------------------------------------------------------
@@ -1075,7 +1114,7 @@ module.exports = async function (req, res) {
 
       if (!followUpResponse.ok) {
         console.error("Groq API error (tool follow-up):", followUpResponse.status, JSON.stringify(data));
-        return res.status(followUpResponse.status).json({ error: data.error?.message || "Groq API error" });
+        return sendGroqError(res, followUpResponse.status, data);
       }
     }
 
