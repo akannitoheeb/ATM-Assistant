@@ -69,7 +69,7 @@ module.exports = async function (req, res) {
         amount: config.amount,
         currency,
         payment_plan: config.planId,
-        redirect_url: "https://assistant.toheebakanni.name.ng/?upgraded=1",
+        redirect_url: "https://beeto.toheebakanni.name.ng/?upgraded=1",
         customer: { email: user.email },
         customizations: {
           title: "Beeto Pro",
