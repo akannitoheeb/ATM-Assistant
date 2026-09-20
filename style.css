@@ -1248,11 +1248,39 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 32px 20px 16px 20px;
-  max-width: 720px;
   width: 100%;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
+  padding-top: 32px;
+  padding-bottom: 16px;
+  /* keeps the messages in the same 680px centered column,
+     while the scrollbar itself sits at the far right edge */
+  padding-left: max(20px, calc((100% - 680px) / 2));
+  padding-right: max(20px, calc((100% - 680px) / 2));
   overscroll-behavior: contain;
+}
+
+/* Thin scrollbar: Chrome, Edge, Safari */
+.chat-log::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-log::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-log::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
+}
+.chat-log::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Thin scrollbar: Firefox only (Chrome ignores the webkit styles above if these apply) */
+@supports not selector(::-webkit-scrollbar) {
+  .chat-log {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  }
 }
 
 .chat-log.hidden {
@@ -2364,7 +2392,7 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   .greeting-state h1 { font-size: 22px; }
   .greeting-sub { font-size: 13px; padding: 0 12px; }
 
-  .chat-log { padding: 20px 14px 12px 14px; }
+  .chat-log { padding-top: 20px; padding-bottom: 12px; padding-left: 14px; padding-right: 14px; }
   .bubble { max-width: 88%; font-size: 14.5px; }
 
   .chat-input-row {
