@@ -210,7 +210,18 @@ function looksLikeEcho(transcript) {
   return matchedWords.length / heardWords.length > 0.5;
 }
 
+// Bumped every time speech is stopped or restarted, so a browser-voice
+// queue that is still running knows it was cancelled and stops itself.
+let speechToken = 0;
+
+// If the ElevenLabs endpoint fails (out of credits, bad key, outage),
+// stop asking it for a few minutes and use the free browser voice
+// straight away instead of waiting on a request that will fail again.
+let ttsServerDisabledUntil = 0;
+const TTS_RETRY_AFTER_MS = 5 * 60 * 1000;
+
 function stopAllSpeech() {
+  speechToken++;
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   if (currentTtsAudio) {
     resetTtsHandlers(currentTtsAudio);
@@ -246,7 +257,7 @@ async function speakText(text, onDone) {
 
   // Guests would just get a 401 from /api/tts, so skip the round trip
   // and go straight to the free browser voice.
-  if (!isGuest) {
+  if (!isGuest && Date.now() >= ttsServerDisabledUntil) {
     try {
       const authHeaders = await getAuthHeaders();
       const response = await fetch(TTS_API_URL, {
@@ -255,7 +266,10 @@ async function speakText(text, onDone) {
         body: JSON.stringify({ text: plainText })
       });
 
-      if (!response.ok) throw new Error("TTS request failed: " + response.status);
+      if (!response.ok) {
+        ttsServerDisabledUntil = Date.now() + TTS_RETRY_AFTER_MS;
+        throw new Error("TTS request failed: " + response.status);
+      }
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -286,6 +300,64 @@ async function speakText(text, onDone) {
   speakWithBrowserVoice(plainText, onDone);
 }
 
+// Voices that exist on some devices but sound like novelties.
+const NOVELTY_VOICE_NAMES = new Set([
+  "albert", "bad news", "bahh", "bells", "boing", "bubbles", "cellos",
+  "good news", "jester", "organ", "superstar", "trinoids", "whisper",
+  "wobble", "zarvox", "fred", "junior", "kathy", "ralph"
+]);
+
+// Picks the most natural-sounding English voice this device offers.
+function pickBestBrowserVoice(voices) {
+  const english = voices.filter((v) =>
+    v.lang && v.lang.toLowerCase().startsWith("en") &&
+    !NOVELTY_VOICE_NAMES.has(v.name.toLowerCase())
+  );
+  const rank = (v) => {
+    const name = v.name.toLowerCase();
+    if (name.includes("natural")) return 0;   // Edge online neural voices
+    if (name.includes("premium")) return 1;   // iOS / macOS
+    if (name.includes("enhanced")) return 2;  // iOS / macOS
+    if (name.includes("google")) return 3;    // Chrome
+    if (name.includes("siri")) return 3;
+    return 4;
+  };
+  return english.slice().sort((a, b) => rank(a) - rank(b))[0] || null;
+}
+
+// Splits text into short, sentence-sized pieces. Chrome's built-in
+// voices silently stop speaking after roughly 15 seconds on a single
+// long utterance, so long replies are spoken piece by piece instead.
+function splitIntoSpeechChunks(text, maxLen = 180) {
+  const sentences = text.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) || [text];
+  const chunks = [];
+  let current = "";
+
+  const pushLongSafe = (piece) => {
+    // A single sentence that is still too long gets split on spaces.
+    let remaining = piece.trim();
+    while (remaining.length > maxLen * 1.5) {
+      let cut = remaining.lastIndexOf(" ", maxLen);
+      if (cut < maxLen * 0.5) cut = maxLen;
+      chunks.push(remaining.slice(0, cut).trim());
+      remaining = remaining.slice(cut).trim();
+    }
+    if (remaining) chunks.push(remaining);
+  };
+
+  for (const sentence of sentences) {
+    if (current && (current + sentence).length > maxLen) {
+      pushLongSafe(current);
+      current = sentence;
+    } else {
+      current += sentence;
+    }
+  }
+  if (current.trim()) pushLongSafe(current);
+
+  return chunks.length > 0 ? chunks : [text];
+}
+
 function speakWithBrowserVoice(plainText, onDone) {
   if (!("speechSynthesis" in window)) {
     currentlySpokenText = null;
@@ -294,17 +366,42 @@ function speakWithBrowserVoice(plainText, onDone) {
   }
 
   currentlySpokenText = plainText; // re-set in case this was reached via the ElevenLabs error fallback
-  const utterance = new SpeechSynthesisUtterance(plainText);
+  const myToken = ++speechToken;
 
-  if (settings.voiceURI) {
-    const chosenVoice = speechSynthesis.getVoices().find(v => v.voiceURI === settings.voiceURI);
-    if (chosenVoice) utterance.voice = chosenVoice;
+  // A voice picked in Settings always wins; otherwise use the best one available.
+  const allVoices = speechSynthesis.getVoices();
+  const voice =
+    allVoices.find((v) => v.voiceURI === settings.voiceURI) ||
+    pickBestBrowserVoice(allVoices);
+
+  const chunks = splitIntoSpeechChunks(plainText);
+  let index = 0;
+
+  function speakNext() {
+    if (myToken !== speechToken) return; // cancelled or replaced by newer speech
+
+    if (index >= chunks.length) {
+      currentlySpokenText = null;
+      if (onDone) onDone();
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(chunks[index++]);
+    if (voice) {
+      utterance.voice = voice;
+      utterance.lang = voice.lang;
+    }
+    utterance.onend = speakNext;
+    utterance.onerror = (event) => {
+      if (myToken !== speechToken) return;
+      if (event.error === "canceled" || event.error === "interrupted") return;
+      speakNext(); // skip a piece that failed and carry on
+    };
+
+    speechSynthesis.speak(utterance);
   }
 
-  utterance.onend = () => { currentlySpokenText = null; if (onDone) onDone(); };
-  utterance.onerror = () => { currentlySpokenText = null; if (onDone) onDone(); };
-
-  speechSynthesis.speak(utterance);
+  speakNext();
 }
 
 function toggleSpeak(text, btn) {
@@ -328,7 +425,7 @@ function populateVoiceOptions() {
   if (voices.length === 0) return; // retries via voiceschanged below
 
   const currentValue = voiceSelect.value;
-  voiceSelect.innerHTML = '<option value="">Default</option>';
+  voiceSelect.innerHTML = '<option value="">Auto (best available)</option>';
   voices
     .filter(v => v.lang.startsWith("en"))
     .forEach((v) => {
