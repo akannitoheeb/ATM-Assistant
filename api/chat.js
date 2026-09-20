@@ -28,6 +28,12 @@
 // side, and we additionally skip the post-reply memory-extraction
 // call below so nothing from the exchange gets written back either.
 //
+// Voice mode: when the client sends voiceMode: true (hands-free
+// conversation), the reply will be read aloud, so we add a short
+// "speak, don't write" instruction, cap the reply length, use low
+// reasoning effort for speed, and skip the post-reply extras call
+// (suggestion chips aren't shown by voice mode anyway) to cut latency.
+//
 // Modes (mutually exclusive, chosen by the client):
 //   - undefined/normal  — plain chat, optionally with web search
 //   - "campaign"        — single email, JSON-structured, optionally
@@ -48,6 +54,11 @@ const CAMPAIGN_LANDING_MESSAGE_WEIGHT = 3;
 const REPURPOSE_EXTRA_WEIGHT = 1;
 const SEQUENCE_MIN_LENGTH = 3;
 const SEQUENCE_MAX_LENGTH = 5;
+
+// Voice replies are spoken, so they should be short. Reasoning tokens
+// count toward the completion limit on gpt-oss, so this is generous
+// enough that a short spoken answer is never cut off to nothing.
+const VOICE_MAX_COMPLETION_TOKENS = 1024;
 
 // weightOpts: { includeLandingPage, includeRepurpose, sequenceLength }
 function getRequestWeight(mode, weightOpts = {}) {
@@ -215,6 +226,19 @@ Guests (not signed in) get 1 free message per day before being asked to
 sign up.
 `.trim();
 
+// Appended only when the client is in hands-free voice mode. The reply
+// is turned into speech, so it has to sound natural out loud.
+const VOICE_MODE_INSTRUCTION = `
+VOICE MODE: Your reply will be spoken aloud to the user in a live voice
+conversation. Answer in one to three short, natural sentences, the way a
+helpful assistant would talk. Do not use markdown, bullet points, numbered
+lists, tables, headings, emoji, code blocks, LaTeX, or URLs. Do not read out
+symbols. If the full answer needs more detail, give the headline first and
+offer to go deeper. If the user asks you to write something long (like a
+full email), give a brief spoken summary and tell them you can put the full
+text in the chat when they switch to typing.
+`.trim();
+
 // --------------------------------------------------------------
 // Shared schema building blocks — pulled out to their own consts so
 // both the single-campaign schema and (in principle) any future
@@ -257,8 +281,7 @@ const REPURPOSE_SCHEMA_FIELDS = {
 
 // Builds the campaign response_format schema on the fly based on
 // which add-ons are active, instead of maintaining a combinatorial
-// set of static CAMPAIGN_*_SCHEMA constants (that approach doesn't
-// scale past two toggles).
+// set of static CAMPAIGN_*_SCHEMA constants.
 function buildCampaignSchema({ includeLandingPage, includeRepurpose } = {}) {
   const properties = {
     subject_lines: { type: "array", items: { type: "string" } },
@@ -288,10 +311,9 @@ function buildCampaignSchema({ includeLandingPage, includeRepurpose } = {}) {
   };
 }
 
-// Parameterized by length now, instead of one static schema — the emails
-// array gets minItems/maxItems pinned to exactly what the user asked for,
-// so the model can no longer satisfy the schema by returning fewer emails
-// than requested.
+// Parameterized by length — the emails array gets minItems/maxItems
+// pinned to exactly what the user asked for, so the model can no
+// longer satisfy the schema by returning fewer emails than requested.
 function buildSequenceSchema(length) {
   return {
     type: "json_schema",
@@ -454,11 +476,11 @@ async function sendBrevoEmail({ to, subject, body }) {
 // --------------------------------------------------------------
 // Post-reply extras — a small second Groq call after each normal
 // (non-campaign, non-sequence) reply. Does two jobs in one call: (1)
-// decides whether anything durable/personal is worth remembering, the
-// same as before, and (2) writes 3 suggested follow-up messages, the
-// same idea as ChatGPT/Claude's suggestion chips. Silent no-op on any
-// failure; a missed memory or missed suggestions are never worth
-// blocking the reply.
+// decides whether anything durable/personal is worth remembering, and
+// (2) writes 3 suggested follow-up messages, the same idea as
+// ChatGPT/Claude's suggestion chips. Silent no-op on any failure; a
+// missed memory or missed suggestions are never worth blocking the
+// reply.
 // --------------------------------------------------------------
 const POST_REPLY_SCHEMA = {
   type: "json_schema",
@@ -499,7 +521,7 @@ realistically send next, based specifically on what was just discussed.
 Write them in the user's own voice, first person, as if the user typed
 them (e.g. "Make the subject line punchier", not "Ask for a punchier
 subject line"). Keep each under 8 words. Never suggest something generic
-like "Tell me more, ground every suggestion in the actual reply above.
+like "Tell me more". Ground every suggestion in the actual reply above.
 
 Existing memories (never duplicate these):
 ${existingMemories.length > 0 ? existingMemories.map((m) => `- ${m}`).join("\n") : "(none yet)"}
@@ -727,7 +749,7 @@ async function getUserPlanInfo(userId) {
     { headers }
   );
   const rows = await res.json();
-  const sub = rows[0];
+  const sub = Array.isArray(rows) ? rows[0] : null;
 
   const isActivePro =
     sub &&
@@ -751,7 +773,7 @@ async function checkAndIncrementUsage(userId, limit, weight) {
     { headers }
   );
   const rows = await getRes.json();
-  const row = rows[0];
+  const row = Array.isArray(rows) ? rows[0] : null;
 
   if (!row) {
     await fetch(`${SUPABASE_URL}/rest/v1/usage_limits`, {
@@ -795,7 +817,7 @@ async function checkAndIncrementKeyedUsage(key, limit) {
     { headers }
   );
   const rows = await getRes.json();
-  const row = rows[0];
+  const row = Array.isArray(rows) ? rows[0] : null;
 
   if (!row) {
     await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits`, {
@@ -852,8 +874,13 @@ module.exports = async function (req, res) {
     includeRepurpose,
     sequenceLength,
     webSearch,
-    privateMode
+    privateMode,
+    voiceMode
   } = req.body || {};
+
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: "No messages provided." });
+  }
 
   const requestWeight = getRequestWeight(mode, { includeLandingPage, includeRepurpose, sequenceLength });
 
@@ -881,7 +908,7 @@ module.exports = async function (req, res) {
       });
     }
   } else {
-    if (Array.isArray(messages) && totalMessageChars(messages) > MAX_GUEST_MESSAGE_CHARS) {
+    if (totalMessageChars(messages) > MAX_GUEST_MESSAGE_CHARS) {
       return res.status(413).json({
         error: "That message is too long to try as a guest. Sign up for full access.",
         code: "GUEST_LIMIT"
@@ -917,6 +944,10 @@ module.exports = async function (req, res) {
     const isStructuredMode = mode === "campaign" || mode === "sequence";
     const clampedSequenceLength = Math.min(Math.max(sequenceLength || SEQUENCE_MIN_LENGTH, SEQUENCE_MIN_LENGTH), SEQUENCE_MAX_LENGTH);
 
+    // Voice mode only applies to normal chat — structured campaign and
+    // sequence replies are JSON, never spoken.
+    const isVoiceRequest = Boolean(voiceMode) && !isStructuredMode;
+
     // Only search for normal chat — never for campaign/sequence mode,
     // whose replies are structured JSON, not a place to splice search
     // context into.
@@ -932,7 +963,8 @@ module.exports = async function (req, res) {
       mode === "campaign" && includeLandingPage ? LANDING_PAGE_INSTRUCTION : "",
       mode === "campaign" && includeRepurpose ? REPURPOSE_INSTRUCTION : "",
       mode === "sequence" ? buildSequenceInstruction(clampedSequenceLength) : "",
-      searchResults ? buildSearchContextBlock(searchResults) : ""
+      searchResults ? buildSearchContextBlock(searchResults) : "",
+      isVoiceRequest ? VOICE_MODE_INSTRUCTION : ""
     ].filter(Boolean).join("\n\n");
 
     let responseFormat;
@@ -953,6 +985,13 @@ module.exports = async function (req, res) {
       ...messages
     ];
 
+    // Voice replies: low reasoning effort (faster first word) and a
+    // capped length. Only applied to the text model; the vision model
+    // doesn't take these parameters.
+    const voiceTuning = isVoiceRequest && usingTextModel
+      ? { reasoning_effort: "low", max_completion_tokens: VOICE_MAX_COMPLETION_TOKENS }
+      : {};
+
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -963,6 +1002,7 @@ module.exports = async function (req, res) {
         model: usingTextModel ? TEXT_MODEL : VISION_MODEL,
         messages: conversationMessages,
         ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
+        ...voiceTuning,
         ...(responseFormat ? { response_format: responseFormat } : {}),
         ...(toolsForThisRequest ? { tools: toolsForThisRequest, tool_choice: "auto" } : {})
       })
@@ -1026,7 +1066,8 @@ module.exports = async function (req, res) {
         body: JSON.stringify({
           model: usingTextModel ? TEXT_MODEL : VISION_MODEL,
           messages: conversationMessages,
-          ...(usingTextModel ? { reasoning_format: "hidden" } : {})
+          ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
+          ...voiceTuning
         })
       });
 
@@ -1071,9 +1112,17 @@ module.exports = async function (req, res) {
     // non-private-mode users get memory extraction — guests have
     // nowhere persistent to store it, and private mode is explicitly
     // "don't remember anything from this conversation."
+    //
+    // In voice mode this whole second call is skipped to keep the
+    // conversation snappy (it adds a full extra round trip before the
+    // spoken reply can start). To still save memories from voice chats,
+    // remove the `isVoiceRequest ? null :` guard below and accept the
+    // extra latency.
     const latestUserText = getLatestUserText(messages);
     const existingMemories = (settings?.memories || []).map((m) => m.text);
-    const extras = await extractPostReplyExtras(apiKey, latestUserText, reply, existingMemories);
+    const extras = isVoiceRequest
+      ? null
+      : await extractPostReplyExtras(apiKey, latestUserText, reply, existingMemories);
 
     const memory = (user && !privateMode) ? extras?.memory ?? null : null;
     const suggestions = extras?.suggestions ?? [];
