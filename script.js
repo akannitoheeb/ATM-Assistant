@@ -578,6 +578,10 @@ if (SpeechRecognitionCtor) {
       commandRecognition.start();
       commandRecognitionActive = true;
     } catch (error) {
+      if (error && error.name === "InvalidStateError") {
+        commandRecognitionActive = true; // already running, which is what we wanted
+        return;
+      }
       console.error("Beeto voice mode — could not start listening:", error);
       if (voiceModeEnabled && !fromTap) setVoiceStatus("paused"); // ask for a tap instead of dying
     }
@@ -651,7 +655,7 @@ if (SpeechRecognitionCtor) {
       updateVoiceModeUI();
       setVoiceStatus("idle");
       stopMicLevelMeter();
-      alert("Microphone access was blocked. Enable it under Settings > Safari > Microphone for this site (or the equivalent site-permissions screen on Android Chrome).");
+      alert("Voice input was blocked. Allow the microphone for this site (iPhone: Settings > Safari > Microphone), and on iPhone also turn on Settings > General > Keyboard > Enable Dictation and Settings > Siri & Search > Siri. On Android, allow the microphone in Chrome's site settings.");
     } else if (event.error === "audio-capture") {
       voiceModeEnabled = false;
       updateVoiceModeUI();
@@ -688,6 +692,10 @@ if (SpeechRecognitionCtor) {
     // instead; the speech-finished callback restarts listening.
     if (voiceModeEnabled) {
       if (voiceOrbEl?.dataset.state === "paused") return; // waiting for a tap, don't loop
+      if (isIOS) {
+        setVoiceStatus("paused"); // iPhone can't restart the mic without a tap
+        return;
+      }
       const beetoIsSpeaking =
         currentTtsAudio ||
         (currentlySpokenText && "speechSynthesis" in window && speechSynthesis.speaking);
@@ -726,7 +734,7 @@ if (SpeechRecognitionCtor) {
   // and says "Tap to talk". Tapping it is a real gesture, so it always works.
   voiceOrbEl.addEventListener("click", () => {
     if (!voiceModeEnabled || voiceOrbEl.dataset.state !== "paused") return;
-    unlockAudioPlayback();
+    primeTtsAudioElement();
     setVoiceStatus("listening");
     commandProducedResult = false;
     startCommandListening(true);
@@ -738,15 +746,30 @@ if (SpeechRecognitionCtor) {
 
     if (voiceModeEnabled) {
       unlockAudioPlayback(); // must happen synchronously, right inside this tap
-      setVoiceStatus("listening");
       startMicLevelMeter();
       commandProducedResult = false;
-      lastListenStartedByTap = true;
       lastHeardTranscript = "";
+
+      if (isIOS) {
+        // iPhone Safari only lets the mic start from a real tap, and it
+        // also can't listen and speak at the same moment. So on iPhone
+        // each turn is: tap the orb, speak, hear the reply.
+        setVoiceStatus("paused");
+        return;
+      }
+
+      setVoiceStatus("listening");
+      lastListenStartedByTap = true;
       try {
         commandRecognition.start();
         commandRecognitionActive = true;
       } catch (error) {
+        if (error && error.name === "InvalidStateError") {
+          // The recognizer is already running (for example it was restarted a
+          // moment ago). That is fine, nothing to do.
+          commandRecognitionActive = true;
+          return;
+        }
         console.error("Beeto voice mode — could not start listening:", error);
         voiceModeEnabled = false;
         updateVoiceModeUI();
@@ -756,13 +779,26 @@ if (SpeechRecognitionCtor) {
       }
     } else {
       setVoiceStatus("idle");
-      try { commandRecognition.stop(); } catch (error) {}
+      try { commandRecognition.abort(); } catch (error) {} // abort() ends it immediately, stop() can linger
       commandRecognitionActive = false;
       stopAllSpeech();
       commandProducedResult = false;
       stopMicLevelMeter();
     }
   });
+}
+
+// Goes back to listening after a reply. On iPhone the mic can only be
+// started by a tap, so it waits for one instead.
+function resumeVoiceListening() {
+  if (!voiceModeEnabled) return;
+  if (isIOS) {
+    setVoiceStatus("paused");
+    return;
+  }
+  setVoiceStatus("listening");
+  commandProducedResult = false;
+  startCommandListening();
 }
 
 function updateVoiceModeUI() {
@@ -2519,9 +2555,8 @@ async function handleSend(event) {
         speakText(result.reply, () => {
           if (voiceModeEnabled) {
             // startCommandListening() is a no-op if barge-in already
-            // has recognition running.
-            setVoiceStatus("listening");
-            startCommandListening();
+            // has recognition running. On iPhone this waits for a tap.
+            resumeVoiceListening();
           } else {
             setVoiceStatus("idle");
           }
@@ -2558,9 +2593,7 @@ async function handleSend(event) {
     // speakText() above, so nothing will resume listening on its own
     // in those cases — do it here instead.
     if (voiceModeEnabled && !voiceWillRespond) {
-      setVoiceStatus("listening");
-      commandProducedResult = false;
-      startCommandListening();
+      resumeVoiceListening();
     }
   }
 }
