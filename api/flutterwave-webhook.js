@@ -11,7 +11,7 @@
 // the extra console.log lines can be trimmed back out.
 //
 // Set this exact URL in Flutterwave -> Settings -> Webhooks:
-//   https://assistant.toheebakanni.name.ng/api/flutterwave-webhook
+//   https://beeto.toheebakanni.name.ng/api/flutterwave-webhook
 //
 // Requires these Vercel environment variables:
 //   FLW_SECRET_KEY       - same one used in create-payment.js
