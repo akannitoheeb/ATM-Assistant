@@ -1,24 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://assistant.toheebakanni.name.ng/</loc>
+    <loc>https://beeto.toheebakanni.name.ng/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-09-20</lastmod>
   </url>
 
   <url>
-    <loc>https://assistant.toheebakanni.name.ng/about.html</loc>
+    <loc>https://beeto.toheebakanni.name.ng/about.html</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-09-20</lastmod>
   </url>
 
   <url>
-    <loc>https://assistant.toheebakanni.name.ng/faq.html</loc>
+    <loc>https://beeto.toheebakanni.name.ng/faq.html</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-09-20</lastmod>
   </url>
 
 </urlset>
