@@ -2802,6 +2802,202 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   text-decoration: none;
 }
 
+/* ============================================================
+   Beeto — Claude-style Settings modal (vertical sidebar nav)
+   Paste this whole block at the END of your existing style.css.
+
+   Your original .settings-tabs / .settings-tab rules stay exactly
+   as they are (in case anything else in the app ever reuses them).
+   These new rules only kick in when the "settings-tabs-claude" /
+   "settings-modal-claude" / "settings-body-claude" modifier classes
+   are ALSO present — which only the Settings modal will have, once
+   you update index.html. Combined-class selectors here guarantee
+   these win over the originals regardless of file order.
+   ============================================================ */
+
+/* Widen just the Settings modal for a sidebar + content layout */
+.modal.settings-modal-claude {
+  max-width: 760px;
+  width: 100%;
+}
+
+/* Turn modal-body into a two-column row, only for Settings */
+.modal-body.settings-body-claude {
+  display: flex;
+  flex-direction: row;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  min-height: 420px;
+}
+
+/* ---- Left sidebar nav — overrides the original horizontal pill
+   bar look entirely when this modifier class is present ---- */
+.settings-tabs.settings-tabs-claude {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 200px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  padding: 16px 12px;
+  box-sizing: border-box;
+}
+
+.settings-tabs-claude .settings-tab {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.settings-tabs-claude .settings-tab:hover {
+  background: var(--bg-main);
+  color: var(--text);
+}
+
+/* Active item — rounded gold-tinted highlight pill, like Claude's
+   "Preferences" row in your screenshot */
+.settings-tabs-claude .settings-tab.active {
+  background: rgba(201, 150, 46, 0.18);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.settings-tab-icon {
+  font-size: 15px;
+  width: 18px;
+  text-align: center;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+/* ---- Right-hand content column ---- */
+.settings-panels-claude {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 24px;
+  overflow-y: auto;
+  max-height: 60vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Panels inside this new wrapper already carry .settings-panel /
+   .hidden from your existing CSS — nothing more needed there. */
+
+/* On phones: sidebar becomes a horizontal scrolling strip along the
+   top instead of eating half the screen width */
+@media (max-width: 640px) {
+  .modal-body.settings-body-claude {
+    flex-direction: column;
+  }
+  .settings-tabs.settings-tabs-claude {
+    flex-direction: row;
+    width: 100%;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+  }
+  .settings-tabs-claude .settings-tab {
+    flex-shrink: 0;
+    width: auto;
+    white-space: nowrap;
+  }
+  .settings-panels-claude {
+    max-height: 50vh;
+  }
+}
+
+/* ============================================================
+   Integrations panel — connect/disconnect rows + Brevo API-key
+   input, styled like the pill buttons in your screenshot.
+   ============================================================ */
+.integrations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.integration-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.integration-label {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.integration-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: none;
+  background: var(--gold);
+  color: var(--navy-deep, #16202E);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--font-body);
+}
+
+.integration-btn:hover {
+  background: var(--gold-deep);
+}
+
+.integration-disconnect {
+  background: rgba(224, 118, 90, 0.85);
+  color: var(--text);
+}
+
+.integration-disconnect:hover {
+  background: #E0765A;
+}
+
+.integration-key-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.integration-key-input::placeholder {
+  color: var(--text-soft);
+}
+
+.integration-key-input:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
 .home-footer-links a:hover {
   color: var(--gold);
   text-decoration: underline;
