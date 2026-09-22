@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html><body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+  const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvdXZjdnJuc2VnemVjcWRrb2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDAxOTEsImV4cCI6MjEwMjMxNjE5MX0.fnkm94U5c-gbdDMrBvVoZ4ewyEUcOlRY7TJkqkEQS1Q";
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  (async () => {
+    const hash = window.location.hash.slice(1); // strip leading #
+    const params = new URLSearchParams(hash);
+    const data = JSON.parse(atob(params.get("data").replace(/-/g, "+").replace(/_/g, "/")));
+
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) {
+      document.body.textContent = "Please log in to Beeto first, then try connecting again.";
+      return;
+    }
+
+    const res = await fetch("/api/save-integration", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify(data)
+    });
+
+    document.body.textContent = res.ok
+      ? "Connected! You can close this tab and go back to Beeto."
+      : "Something went wrong saving the connection.";
+  })();
+</script>
+</body></html>
