@@ -1311,6 +1311,15 @@ const clearMemoryBtn = document.getElementById("clearMemoryBtn");
 const aiDisclosureToggle = document.getElementById("aiDisclosureToggle");
 const settingsTabs = document.querySelectorAll(".settings-tab");
 const settingsPanels = document.querySelectorAll(".settings-panel");
+const integrationsList = document.getElementById("integrationsList");
+
+const INTEGRATION_PROVIDERS = [
+  { id: "klaviyo", label: "Klaviyo", oauth: true },
+  { id: "mailchimp", label: "Mailchimp", oauth: true },
+  { id: "brevo", label: "Brevo", oauth: false }
+];
+
+let userIntegrations = []; // loaded from Supabase when Settings opens
 
 settingsTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -1322,16 +1331,6 @@ settingsTabs.forEach((tab) => {
     });
   });
 });
-
-const integrationsList = document.getElementById("integrationsList");
-
-const INTEGRATION_PROVIDERS = [
-  { id: "klaviyo", label: "Klaviyo", oauth: true },
-  { id: "mailchimp", label: "Mailchimp", oauth: true },
-  { id: "brevo", label: "Brevo", oauth: false }
-];
-
-let userIntegrations = []; // loaded from Supabase when Settings opens
 
 function resetSettingsTabs() {
   settingsTabs.forEach((t) => t.classList.remove("active"));
@@ -2026,82 +2025,10 @@ async function saveUserData() {
 }
 
 // --------------------------------------------------------------
-// Settings panel
+// Integrations tab — Klaviyo/Mailchimp via OAuth connect, Brevo via
+// a pasted API key. Loaded fresh each time Settings opens so the
+// list reflects the account's current connections.
 // --------------------------------------------------------------
-
-function openSettingsPanel() {
-  resetSettingsTabs();
-  applySettingsToForm();
-  settingsOverlay.classList.remove("hidden");
-  loadIntegrations().then(renderIntegrationsList);
-}
-
-popupSettingsBtn.addEventListener("click", () => {
-  closeAccountPopup();
-  openSettingsPanel();
-});
-
-function closeGuestPopup() {
-  guestPopup.classList.add("hidden");
-  guestTrigger.setAttribute("aria-expanded", "false");
-}
-
-guestTrigger.addEventListener("click", (e) => {
-  e.stopPropagation();
-  const willOpen = guestPopup.classList.contains("hidden");
-  guestPopup.classList.toggle("hidden", !willOpen);
-  guestTrigger.setAttribute("aria-expanded", String(willOpen));
-});
-
-document.addEventListener("click", (e) => {
-  if (!guestPopup.classList.contains("hidden") && !guestBlock.contains(e.target)) {
-    closeGuestPopup();
-  }
-});
-
-guestSettingsBtn.addEventListener("click", () => {
-  closeGuestPopup();
-  openSettingsPanel();
-});
-
-closeSettingsBtn.addEventListener("click", () => {
-  settingsOverlay.classList.add("hidden");
-});
-
-settingsOverlay.addEventListener("click", (event) => {
-  if (event.target === settingsOverlay) {
-    settingsOverlay.classList.add("hidden");
-  }
-});
-
-saveSettingsBtn.addEventListener("click", () => {
-  settings.tone = toneSelect.value;
-  settings.region = regionSelect.value;
-  settings.emphasizeNigeria = nigeriaToggle.checked;
-  settings.aiDisclosure = aiDisclosureToggle.checked;
-  settings.customInstruction = customInstruction.value.trim();
-  settings.voiceURI = voiceSelect.value;
-
-  const newBrandProfile = {
-    name: brandName.value.trim(),
-    industry: brandIndustry.value.trim(),
-    audience: brandAudience.value.trim(),
-    voice: brandVoice.value.trim(),
-    avoidWords: brandAvoidWords.value.trim(),
-    sampleEmail: brandSampleEmail.value.trim()
-  };
-
-  const project = getActiveProject();
-  if (project) {
-    project.brandProfile = newBrandProfile;
-  } else {
-    settings.brandProfile = newBrandProfile;
-  }
-
-  saveUserData();
-  settingsOverlay.classList.add("hidden");
-});
-
 async function loadIntegrations() {
   if (isGuest) { userIntegrations = []; return; }
   try {
@@ -2198,6 +2125,83 @@ async function disconnectIntegration(provider) {
     alert("Couldn't disconnect. Try again.");
   }
 }
+
+// --------------------------------------------------------------
+// Settings panel
+// --------------------------------------------------------------
+
+function openSettingsPanel() {
+  resetSettingsTabs();
+  applySettingsToForm();
+  settingsOverlay.classList.remove("hidden");
+  loadIntegrations().then(renderIntegrationsList);
+}
+
+popupSettingsBtn.addEventListener("click", () => {
+  closeAccountPopup();
+  openSettingsPanel();
+});
+
+function closeGuestPopup() {
+  guestPopup.classList.add("hidden");
+  guestTrigger.setAttribute("aria-expanded", "false");
+}
+
+guestTrigger.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = guestPopup.classList.contains("hidden");
+  guestPopup.classList.toggle("hidden", !willOpen);
+  guestTrigger.setAttribute("aria-expanded", String(willOpen));
+});
+
+document.addEventListener("click", (e) => {
+  if (!guestPopup.classList.contains("hidden") && !guestBlock.contains(e.target)) {
+    closeGuestPopup();
+  }
+});
+
+guestSettingsBtn.addEventListener("click", () => {
+  closeGuestPopup();
+  openSettingsPanel();
+});
+
+closeSettingsBtn.addEventListener("click", () => {
+  settingsOverlay.classList.add("hidden");
+});
+
+settingsOverlay.addEventListener("click", (event) => {
+  if (event.target === settingsOverlay) {
+    settingsOverlay.classList.add("hidden");
+  }
+});
+
+saveSettingsBtn.addEventListener("click", () => {
+  settings.tone = toneSelect.value;
+  settings.region = regionSelect.value;
+  settings.emphasizeNigeria = nigeriaToggle.checked;
+  settings.aiDisclosure = aiDisclosureToggle.checked;
+  settings.customInstruction = customInstruction.value.trim();
+  settings.voiceURI = voiceSelect.value;
+
+  const newBrandProfile = {
+    name: brandName.value.trim(),
+    industry: brandIndustry.value.trim(),
+    audience: brandAudience.value.trim(),
+    voice: brandVoice.value.trim(),
+    avoidWords: brandAvoidWords.value.trim(),
+    sampleEmail: brandSampleEmail.value.trim()
+  };
+
+  const project = getActiveProject();
+  if (project) {
+    project.brandProfile = newBrandProfile;
+  } else {
+    settings.brandProfile = newBrandProfile;
+  }
+
+  saveUserData();
+  settingsOverlay.classList.add("hidden");
+});
 
 function applySettingsToForm() {
   toneSelect.value = settings.tone;
