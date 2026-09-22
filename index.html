@@ -46,7 +46,7 @@
 <link rel="manifest" href="/site.webmanifest">
   <!-- =================================================== -->
 
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="stylesheet" href="style.css?v=5" />
 
   <!-- KaTeX — renders $...$ / $$...$$ math the assistant sends back as
        real typeset equations instead of raw LaTeX text. -->
@@ -305,110 +305,119 @@
       </div>
     </div>
 
-    <!-- ===================== SETTINGS MODAL ===================== -->
+    <!-- ===================== SETTINGS MODAL (Claude-style sidebar nav) ===================== -->
     <div id="settingsOverlay" class="modal-overlay hidden">
-      <div class="modal">
+      <div class="modal settings-modal-claude">
         <div class="modal-header">
           <h2>Settings</h2>
           <button id="closeSettingsBtn" class="modal-close" aria-label="Close">✕</button>
         </div>
 
-                <div class="modal-body">
-                  
-         <div class="settings-tabs">
-            <button type="button" class="settings-tab active" data-tab="general">General</button>
-            <button type="button" class="settings-tab" data-tab="brand">Brand Profile</button>
-            <button type="button" class="settings-tab" data-tab="memory">Memory</button>
-            <button type="button" class="settings-tab" data-tab="integrations">Integrations</button>
-          </div>
+        <div class="modal-body settings-body-claude">
+          <nav class="settings-tabs settings-tabs-claude">
+            <button type="button" class="settings-tab active" data-tab="general">
+              <span class="settings-tab-icon">⚙</span> General
+            </button>
+            <button type="button" class="settings-tab" data-tab="brand">
+              <span class="settings-tab-icon">🏷</span> Brand Profile
+            </button>
+            <button type="button" class="settings-tab" data-tab="memory">
+              <span class="settings-tab-icon">🧠</span> Memory
+            </button>
+            <button type="button" class="settings-tab" data-tab="integrations">
+              <span class="settings-tab-icon">🔗</span> Integrations
+            </button>
+          </nav>
 
-          <div class="settings-panel" data-panel="general">
-            <label class="field-label" for="toneSelect">Tone</label>
-            <select id="toneSelect">
-              <option value="friendly and warm">Friendly & warm</option>
-              <option value="direct and professional">Direct & professional</option>
-              <option value="playful and energetic">Playful & energetic</option>
-              <option value="premium and understated">Premium & understated</option>
-            </select>
+          <div class="settings-panels-claude">
+            <div class="settings-panel" data-panel="general">
+              <label class="field-label" for="toneSelect">Tone</label>
+              <select id="toneSelect">
+                <option value="friendly and warm">Friendly & warm</option>
+                <option value="direct and professional">Direct & professional</option>
+                <option value="playful and energetic">Playful & energetic</option>
+                <option value="premium and understated">Premium & understated</option>
+              </select>
 
-            <label class="field-label" for="regionSelect">Who are you sending to?</label>
-            <select id="regionSelect">
-              <option value="us">United States (CAN-SPAM)</option>
-              <option value="eu">European Union (GDPR / ePrivacy)</option>
-              <option value="ca">Canada (CASL)</option>
-            </select>
-            <p class="settings-hint">Tunes the deliverability checklist on generated campaigns to the legal requirements for that region. Pick the region most of your list is in.</p>
+              <label class="field-label" for="regionSelect">Who are you sending to?</label>
+              <select id="regionSelect">
+                <option value="us">United States (CAN-SPAM)</option>
+                <option value="eu">European Union (GDPR / ePrivacy)</option>
+                <option value="ca">Canada (CASL)</option>
+              </select>
+              <p class="settings-hint">Tunes the deliverability checklist on generated campaigns to the legal requirements for that region. Pick the region most of your list is in.</p>
 
-            <label class="field-label" for="voiceSelect">Voice for "Listen" playback</label>
-            <select id="voiceSelect">
-              <option value="">Default</option>
-            </select>
+              <label class="field-label" for="voiceSelect">Voice for "Listen" playback</label>
+              <select id="voiceSelect">
+                <option value="">Default</option>
+              </select>
 
-          <label class="checkbox-row">
-            <input type="checkbox" id="nigeriaToggle" checked />
-            <span>Emphasize Nigerian market context in marketing answers</span>
-          </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="nigeriaToggle" checked />
+              <span>Emphasize Nigerian market context in marketing answers</span>
+            </label>
 
-          <label class="checkbox-row">
-            <input type="checkbox" id="aiDisclosureToggle" checked />
-            <span>Flag generated campaigns as AI-assisted (adds a disclosure line to the email, required for EU recipients under the AI Act)</span>
-          </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="aiDisclosureToggle" checked />
+              <span>Flag generated campaigns as AI-assisted (adds a disclosure line to the email, required for EU recipients under the AI Act)</span>
+            </label>
 
-            <label class="field-label" for="customInstruction">Extra instructions (optional)</label>
-            <textarea
-              id="customInstruction"
-              rows="3"
-              placeholder="e.g. Keep replies short. Always suggest 3 options, not 5."
-            ></textarea>
-          </div>
-
-          <div class="settings-panel hidden" data-panel="brand">
-            <p class="settings-hint" id="brandProfileLabel">Used to tailor campaigns and answers to your business specifically.</p>
-
-            <label class="field-label" for="brandName">Business / brand name</label>
-            <input type="text" id="brandName" placeholder="e.g. Beeto" />
-
-            <label class="field-label" for="brandIndustry">Industry</label>
-            <input type="text" id="brandIndustry" placeholder="e.g. fashion, SaaS, coaching" />
-
-            <label class="field-label" for="brandAudience">Target audience</label>
-            <textarea
-              id="brandAudience"
-              rows="2"
-              placeholder="e.g. Young professional women in Lagos, budget-conscious but style-focused"
-            ></textarea>
-
-            <label class="field-label" for="brandVoice">Brand voice</label>
-            <input type="text" id="brandVoice" placeholder="e.g. warm, confident, a little playful" />
-
-            <label class="field-label" for="brandAvoidWords">Words/phrases to avoid</label>
-            <input type="text" id="brandAvoidWords" placeholder="e.g. cheap, discount, hurry" />
-
-            <label class="field-label" for="brandSampleEmail">Sample past email (optional)</label>
-            <textarea
-              id="brandSampleEmail"
-              rows="3"
-              placeholder="Paste a past email so the AI can match your style"
-            ></textarea>
-          </div>
-
-          <div class="settings-panel hidden" data-panel="memory">
-            <p class="settings-hint">Facts Beeto has picked up about you, used in every conversation, across all your projects.</p>
-
-            <div id="memoryList" class="memory-list"></div>
-
-            <div class="memory-add-row">
-              <input type="text" id="memoryInput" placeholder="Add something for it to remember…" />
-              <button type="button" id="addMemoryBtn" class="memory-add-btn">Add</button>
+              <label class="field-label" for="customInstruction">Extra instructions (optional)</label>
+              <textarea
+                id="customInstruction"
+                rows="3"
+                placeholder="e.g. Keep replies short. Always suggest 3 options, not 5."
+              ></textarea>
             </div>
 
-            <button type="button" id="clearMemoryBtn" class="memory-clear-btn">Clear all memories</button>
-          </div>
+            <div class="settings-panel hidden" data-panel="brand">
+              <p class="settings-hint" id="brandProfileLabel">Used to tailor campaigns and answers to your business specifically.</p>
 
-          <div class="settings-panel hidden" data-panel="integrations">
-            <p class="settings-hint">Connect your own email platform so Beeto can send campaigns straight to your list.</p>
+              <label class="field-label" for="brandName">Business / brand name</label>
+              <input type="text" id="brandName" placeholder="e.g. Beeto" />
 
-            <div id="integrationsList" class="integrations-list"></div>
+              <label class="field-label" for="brandIndustry">Industry</label>
+              <input type="text" id="brandIndustry" placeholder="e.g. fashion, SaaS, coaching" />
+
+              <label class="field-label" for="brandAudience">Target audience</label>
+              <textarea
+                id="brandAudience"
+                rows="2"
+                placeholder="e.g. Young professional women in Lagos, budget-conscious but style-focused"
+              ></textarea>
+
+              <label class="field-label" for="brandVoice">Brand voice</label>
+              <input type="text" id="brandVoice" placeholder="e.g. warm, confident, a little playful" />
+
+              <label class="field-label" for="brandAvoidWords">Words/phrases to avoid</label>
+              <input type="text" id="brandAvoidWords" placeholder="e.g. cheap, discount, hurry" />
+
+              <label class="field-label" for="brandSampleEmail">Sample past email (optional)</label>
+              <textarea
+                id="brandSampleEmail"
+                rows="3"
+                placeholder="Paste a past email so the AI can match your style"
+              ></textarea>
+            </div>
+
+            <div class="settings-panel hidden" data-panel="memory">
+              <p class="settings-hint">Facts Beeto has picked up about you, used in every conversation, across all your projects.</p>
+
+              <div id="memoryList" class="memory-list"></div>
+
+              <div class="memory-add-row">
+                <input type="text" id="memoryInput" placeholder="Add something for it to remember…" />
+                <button type="button" id="addMemoryBtn" class="memory-add-btn">Add</button>
+              </div>
+
+              <button type="button" id="clearMemoryBtn" class="memory-clear-btn">Clear all memories</button>
+            </div>
+
+            <div class="settings-panel hidden" data-panel="integrations">
+              <p class="settings-hint">Connect your own email platform so Beeto can send campaigns straight to your list.</p>
+
+              <div id="integrationsList" class="integrations-list"></div>
+            </div>
           </div>
         </div>
 
@@ -417,7 +426,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- ===================== ONBOARDING WIZARD ===================== -->
     <div id="onboardingOverlay" class="modal-overlay hidden">
       <div class="modal onboarding-modal">
@@ -608,6 +617,6 @@
 
   </div>
 
-  <script src="script.js?v=24"></script>
+  <script src="script.js?v=25"></script>
 </body>
 </html>
