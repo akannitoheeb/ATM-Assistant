@@ -314,10 +314,12 @@
         </div>
 
                 <div class="modal-body">
-          <div class="settings-tabs">
+                  
+         <div class="settings-tabs">
             <button type="button" class="settings-tab active" data-tab="general">General</button>
             <button type="button" class="settings-tab" data-tab="brand">Brand Profile</button>
             <button type="button" class="settings-tab" data-tab="memory">Memory</button>
+            <button type="button" class="settings-tab" data-tab="integrations">Integrations</button>
           </div>
 
           <div class="settings-panel" data-panel="general">
@@ -402,6 +404,12 @@
 
             <button type="button" id="clearMemoryBtn" class="memory-clear-btn">Clear all memories</button>
           </div>
+
+          <div class="settings-panel hidden" data-panel="integrations">
+            <p class="settings-hint">Connect your own email platform so Beeto can send campaigns straight to your list.</p>
+
+            <div id="integrationsList" class="integrations-list"></div>
+          </div>
         </div>
 
         <div class="modal-footer">
@@ -409,7 +417,7 @@
         </div>
       </div>
     </div>
-
+    
     <!-- ===================== ONBOARDING WIZARD ===================== -->
     <div id="onboardingOverlay" class="modal-overlay hidden">
       <div class="modal onboarding-modal">
