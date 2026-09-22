@@ -1323,6 +1323,16 @@ settingsTabs.forEach((tab) => {
   });
 });
 
+const integrationsList = document.getElementById("integrationsList");
+
+const INTEGRATION_PROVIDERS = [
+  { id: "klaviyo", label: "Klaviyo", oauth: true },
+  { id: "mailchimp", label: "Mailchimp", oauth: true },
+  { id: "brevo", label: "Brevo", oauth: false }
+];
+
+let userIntegrations = []; // loaded from Supabase when Settings opens
+
 function resetSettingsTabs() {
   settingsTabs.forEach((t) => t.classList.remove("active"));
   settingsPanels.forEach((p) => p.classList.add("hidden"));
@@ -2023,6 +2033,7 @@ function openSettingsPanel() {
   resetSettingsTabs();
   applySettingsToForm();
   settingsOverlay.classList.remove("hidden");
+  loadIntegrations().then(renderIntegrationsList);
 }
 
 popupSettingsBtn.addEventListener("click", () => {
@@ -2090,6 +2101,103 @@ saveSettingsBtn.addEventListener("click", () => {
   saveUserData();
   settingsOverlay.classList.add("hidden");
 });
+
+async function loadIntegrations() {
+  if (isGuest) { userIntegrations = []; return; }
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch("/api/list-integrations", { headers: authHeaders });
+    const data = await response.json();
+    userIntegrations = Array.isArray(data.integrations) ? data.integrations : [];
+  } catch (error) {
+    console.error("Failed to load integrations:", error);
+    userIntegrations = [];
+  }
+}
+
+function renderIntegrationsList() {
+  if (!integrationsList) return;
+  integrationsList.innerHTML = "";
+
+  INTEGRATION_PROVIDERS.forEach((p) => {
+    const connected = userIntegrations.find((i) => i.provider === p.id);
+
+    const row = document.createElement("div");
+    row.className = "integration-row";
+
+    const label = document.createElement("span");
+    label.className = "integration-label";
+    label.textContent = p.label + (connected ? " — connected" : "");
+    row.appendChild(label);
+
+    if (connected) {
+      const disconnectBtn = document.createElement("button");
+      disconnectBtn.type = "button";
+      disconnectBtn.className = "integration-btn integration-disconnect";
+      disconnectBtn.textContent = "Disconnect";
+      disconnectBtn.addEventListener("click", () => disconnectIntegration(p.id));
+      row.appendChild(disconnectBtn);
+    } else if (p.oauth) {
+      const connectBtn = document.createElement("button");
+      connectBtn.type = "button";
+      connectBtn.className = "integration-btn";
+      connectBtn.textContent = "Connect " + p.label;
+      connectBtn.addEventListener("click", () => {
+        window.location.href = `/api/oauth-start?provider=${p.id}&mode=connect`;
+      });
+      row.appendChild(connectBtn);
+    } else {
+      // Brevo — no OAuth, just a paste-your-key field
+      const keyInput = document.createElement("input");
+      keyInput.type = "text";
+      keyInput.placeholder = "Paste your Brevo API key";
+      keyInput.className = "integration-key-input";
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "integration-btn";
+      saveBtn.textContent = "Save";
+      saveBtn.addEventListener("click", () => saveBrevoKey(keyInput.value.trim()));
+
+      row.appendChild(keyInput);
+      row.appendChild(saveBtn);
+    }
+
+    integrationsList.appendChild(row);
+  });
+}
+
+async function saveBrevoKey(key) {
+  if (!key) return;
+  try {
+    const authHeaders = await getAuthHeaders();
+    await fetch("/api/save-integration", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify({ provider: "brevo", access_token: key })
+    });
+    await loadIntegrations();
+    renderIntegrationsList();
+  } catch (error) {
+    alert("Couldn't save your Brevo key. Try again.");
+  }
+}
+
+async function disconnectIntegration(provider) {
+  if (!confirm(`Disconnect ${provider}?`)) return;
+  try {
+    const authHeaders = await getAuthHeaders();
+    await fetch("/api/disconnect-integration", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify({ provider })
+    });
+    await loadIntegrations();
+    renderIntegrationsList();
+  } catch (error) {
+    alert("Couldn't disconnect. Try again.");
+  }
+}
 
 function applySettingsToForm() {
   toneSelect.value = settings.tone;
