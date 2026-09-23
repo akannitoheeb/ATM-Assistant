@@ -3002,3 +3002,18 @@ body.private-mode-active .tools-btn.has-active { background: #6B5B8C; border-col
   color: var(--gold);
   text-decoration: underline;
 }
+
+.icon-svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.icon-spin {
+  animation: iconSpin 0.9s linear infinite;
+}
+
+@keyframes iconSpin {
+  to { transform: rotate(360deg); }
+}
