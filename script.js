@@ -2165,6 +2165,128 @@ async function disconnectIntegration(provider) {
 }
 
 // --------------------------------------------------------------
+// Send Campaign modal
+// --------------------------------------------------------------
+const sendCampaignOverlay = document.getElementById("sendCampaignOverlay");
+const closeSendCampaignBtn = document.getElementById("closeSendCampaignBtn");
+const sendProviderSelect = document.getElementById("sendProviderSelect");
+const sendListSelect = document.getElementById("sendListSelect");
+const sendSubjectSelect = document.getElementById("sendSubjectSelect");
+const sendCampaignError = document.getElementById("sendCampaignError");
+const confirmSendCampaignBtn = document.getElementById("confirmSendCampaignBtn");
+let campaignToSend = null;
+
+closeSendCampaignBtn.addEventListener("click", () => sendCampaignOverlay.classList.add("hidden"));
+sendCampaignOverlay.addEventListener("click", (e) => { if (e.target === sendCampaignOverlay) sendCampaignOverlay.classList.add("hidden"); });
+
+async function openSendCampaignModal(campaign) {
+  campaignToSend = campaign;
+  sendCampaignError.classList.add("hidden");
+  sendListSelect.innerHTML = "";
+  sendProviderSelect.innerHTML = "";
+
+  sendSubjectSelect.innerHTML = "";
+  (campaign.subject_lines || []).forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = s;
+    sendSubjectSelect.appendChild(opt);
+  });
+
+  await loadIntegrations();
+  const connected = userIntegrations.filter((i) => ["brevo", "mailchimp", "klaviyo"].includes(i.provider));
+
+  if (connected.length === 0) {
+    sendCampaignError.textContent = "Connect an email platform in Settings first.";
+    sendCampaignError.classList.remove("hidden");
+    confirmSendCampaignBtn.disabled = true;
+    sendCampaignOverlay.classList.remove("hidden");
+    return;
+  }
+  confirmSendCampaignBtn.disabled = false;
+
+  connected.forEach((i) => {
+    const opt = document.createElement("option");
+    opt.value = i.provider;
+    opt.textContent = i.provider.charAt(0).toUpperCase() + i.provider.slice(1);
+    sendProviderSelect.appendChild(opt);
+  });
+
+  await loadListsForProvider(sendProviderSelect.value);
+  sendProviderSelect.onchange = () => loadListsForProvider(sendProviderSelect.value);
+
+  sendCampaignOverlay.classList.remove("hidden");
+}
+
+async function loadListsForProvider(provider) {
+  sendListSelect.innerHTML = "<option>Loading…</option>";
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`/api/list-esp-lists?provider=${provider}`, { headers: authHeaders });
+    const data = await response.json();
+    sendListSelect.innerHTML = "";
+    (data.lists || []).forEach((l) => {
+      const opt = document.createElement("option");
+      opt.value = l.id;
+      opt.textContent = l.name + (l.count != null ? ` (${l.count})` : "");
+      sendListSelect.appendChild(opt);
+    });
+    if ((data.lists || []).length === 0) {
+      sendListSelect.innerHTML = "<option value=''>No lists found</option>";
+    }
+  } catch (error) {
+    sendListSelect.innerHTML = "<option value=''>Couldn't load lists</option>";
+  }
+}
+
+confirmSendCampaignBtn.addEventListener("click", async () => {
+  if (!campaignToSend) return;
+  const provider = sendProviderSelect.value;
+  const listId = sendListSelect.value;
+  const subjectLine = sendSubjectSelect.value;
+
+  if (!listId) {
+    sendCampaignError.textContent = "Pick a list first.";
+    sendCampaignError.classList.remove("hidden");
+    return;
+  }
+
+  const confirmed = confirm(`Send this campaign to your ${provider} list now? This cannot be undone.`);
+  if (!confirmed) return;
+
+  confirmSendCampaignBtn.disabled = true;
+  confirmSendCampaignBtn.textContent = "Sending…";
+  sendCampaignError.classList.add("hidden");
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch("/api/send-campaign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify({
+        provider,
+        campaign: campaignToSend,
+        listId,
+        subjectLine,
+        senderName: (getActiveBrandProfile() || {}).name || "Beeto",
+        senderEmail: settings.brandProfile?.email || undefined
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Send failed.");
+
+    sendCampaignOverlay.classList.add("hidden");
+    alert("Campaign sent!");
+  } catch (error) {
+    sendCampaignError.textContent = error.message;
+    sendCampaignError.classList.remove("hidden");
+  } finally {
+    confirmSendCampaignBtn.disabled = false;
+    confirmSendCampaignBtn.textContent = "Send now";
+  }
+});
+
+// --------------------------------------------------------------
 // Settings panel
 // --------------------------------------------------------------
 
@@ -3314,6 +3436,14 @@ function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, is
     downloadTextFile(filename, campaignToText(campaign));
   });
   card.appendChild(downloadBtn);
+
+  if (!isGuest) {
+    const sendBtn2 = document.createElement("button");
+    sendBtn2.className = "campaign-copy-btn";
+    sendBtn2.innerHTML = ICONS.send + " Send campaign";
+    sendBtn2.addEventListener("click", () => openSendCampaignModal(campaign));
+    card.appendChild(sendBtn2);
+  }
 
   // --------------------------------------------------------------
   // In-place refinement — only on the most recent campaign card, so
