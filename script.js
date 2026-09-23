@@ -583,7 +583,7 @@ if (SpeechRecognitionCtor) {
   wakeToggleBtn.type = "button";
   wakeToggleBtn.id = "wakeToggleBtn";
   wakeToggleBtn.className = "action-btn";
-  wakeToggleBtn.textContent = "🐝";
+  wakeToggleBtn.innerHTML = ICONS.activity;
   wakeToggleBtn.setAttribute("aria-pressed", "false");
   wakeToggleBtn.setAttribute("aria-label", "Start a hands-free voice conversation");
   wakeToggleBtn.title = "Tap to start a hands-free voice conversation";
@@ -985,7 +985,7 @@ function renderProjectSwitcher() {
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "project-popup-delete";
-    deleteBtn.textContent = "✕";
+    deleteBtn.innerHTML = ICONS.x;
     deleteBtn.setAttribute("aria-label", `Delete ${project.name}`);
     deleteBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1391,7 +1391,7 @@ function renderMemoryList() {
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "memory-item-delete";
-    deleteBtn.textContent = "✕";
+    deleteBtn.innerHTML = ICONS.x;
     deleteBtn.setAttribute("aria-label", "Forget this");
     deleteBtn.addEventListener("click", () => {
       settings.memories = settings.memories.filter((m) => m.id !== mem.id);
@@ -2475,7 +2475,7 @@ function renderAttachmentPreview() {
     if (attachment.kind === "loading") {
       const chip = document.createElement("div");
       chip.className = "attachment-chip";
-      chip.textContent = "⏳ Reading " + attachment.name + "…";
+      chip.innerHTML = ICONS.loader + " Reading " + attachment.name + "…";
       attachmentPreview.appendChild(chip);
       return; // no remove button while it's still loading
     }
@@ -2487,13 +2487,13 @@ function renderAttachmentPreview() {
     } else {
       const chip = document.createElement("div");
       chip.className = "attachment-chip";
-      chip.textContent = "📄 " + attachment.name;
+      chip.innerHTML = ICONS.fileText + " " + attachment.name;
       attachmentPreview.appendChild(chip);
     }
 
     const removeBtn = document.createElement("button");
     removeBtn.className = "attachment-remove";
-    removeBtn.textContent = "✕";
+    removeBtn.innerHTML = ICONS.x;
     removeBtn.addEventListener("click", () => {
       pendingAttachments.splice(index, 1);
       renderAttachmentPreview();
@@ -2512,7 +2512,7 @@ function addTypingIndicator() {
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = "✉";
+  avatar.innerHTML = ICONS.mail;
 
   const body = document.createElement("div");
   body.className = "message-body";
@@ -2851,7 +2851,7 @@ function renderSidebar() {
 
     const menuBtn = document.createElement("button");
     menuBtn.className = "history-item-menu";
-    menuBtn.textContent = "⋮";
+    menuBtn.innerHTML = ICONS.moreVertical;
     menuBtn.setAttribute("aria-label", "Chat options");
     menuBtn.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -2960,8 +2960,8 @@ function addMessageToDOM(msg, kind, animate = false, isLast = false) {
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = kind === "assistant" ? "✉" : getUserInitial();
-
+  if (kind === "assistant") { avatar.innerHTML = ICONS.mail; } else { avatar.textContent = getUserInitial(); }
+  
   const body = document.createElement("div");
   body.className = "message-body";
 
@@ -2976,7 +2976,7 @@ function addMessageToDOM(msg, kind, animate = false, isLast = false) {
     msg.attachments.filter(a => a.kind === "text").forEach((a) => {
       const chip = document.createElement("div");
       chip.className = "attachment-chip";
-      chip.textContent = "📄 " + a.name;
+      chip.innerHTML = ICONS.fileText + " " + a.name;
       body.appendChild(chip);
     });
   }
@@ -3192,7 +3192,7 @@ function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, is
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = "✉";
+  avatar.innerHTML = ICONS.mail;
 
   const body = document.createElement("div");
   body.className = "message-body";
@@ -3268,8 +3268,7 @@ function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, is
 
     const warnLabel = document.createElement("div");
     warnLabel.className = "campaign-warnings-label";
-    warnLabel.textContent = `⚠ ${warnings.length} deliverability flag${warnings.length > 1 ? "s" : ""}`;
-    warnSection.appendChild(warnLabel);
+    warnLabel.innerHTML = ICONS.alertTriangle + ` ${warnings.length} deliverability flag${warnings.length > 1 ? "s" : ""}`;warnSection.appendChild(warnLabel);
 
     const warnList = document.createElement("ul");
     warnings.forEach((w) => {
@@ -3282,7 +3281,7 @@ function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, is
   } else {
     const okMsg = document.createElement("div");
     okMsg.className = "campaign-warnings-ok";
-    okMsg.textContent = "✓ No deliverability flags";
+    okMsg.innerHTML = ICONS.checkCircle + " No deliverability flags";
     card.appendChild(okMsg);
   }
 
@@ -3411,7 +3410,7 @@ function addSequenceCardToDOM(sequence, warningsPerEmail, aiDisclosure) {
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = "✉";
+  avatar.innerHTML = ICONS.mail;
 
   const body = document.createElement("div");
   body.className = "message-body";
@@ -3480,7 +3479,7 @@ function addSequenceCardToDOM(sequence, warningsPerEmail, aiDisclosure) {
       warnSection.className = "campaign-warnings";
       const warnLabel = document.createElement("div");
       warnLabel.className = "campaign-warnings-label";
-      warnLabel.textContent = `⚠ ${emailWarnings.length} deliverability flag${emailWarnings.length > 1 ? "s" : ""}`;
+      warnLabel.innerHTML = ICONS.alertTriangle + ` ${emailWarnings.length} deliverability flag${emailWarnings.length > 1 ? "s" : ""}`;
       warnSection.appendChild(warnLabel);
       const warnList = document.createElement("ul");
       emailWarnings.forEach((w) => {
