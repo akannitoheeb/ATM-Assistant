@@ -66,6 +66,7 @@ const brandName = document.getElementById("brandName");
 const brandIndustry = document.getElementById("brandIndustry");
 const brandAudience = document.getElementById("brandAudience");
 const brandVoice = document.getElementById("brandVoice");
+const brandEmail = document.getElementById("brandEmail");
 const brandAvoidWords = document.getElementById("brandAvoidWords");
 const brandSampleEmail = document.getElementById("brandSampleEmail");
 
@@ -1528,7 +1529,7 @@ function defaultSettings() {
 }
 
 function emptyBrandProfile() {
-  return { name: "", industry: "", audience: "", voice: "", avoidWords: "", sampleEmail: "" };
+  return { name: "", industry: "", audience: "", voice: "", avoidWords: "", sampleEmail: "", email: "" };
 }
 
 function getActiveProject() {
@@ -2269,7 +2270,7 @@ confirmSendCampaignBtn.addEventListener("click", async () => {
         listId,
         subjectLine,
         senderName: (getActiveBrandProfile() || {}).name || "Beeto",
-        senderEmail: settings.brandProfile?.email || undefined
+        senderEmail: (getActiveBrandProfile() || {}).email || undefined
       })
     });
     const data = await response.json();
@@ -2343,13 +2344,14 @@ saveSettingsBtn.addEventListener("click", () => {
   settings.customInstruction = customInstruction.value.trim();
   settings.voiceURI = voiceSelect.value;
 
-  const newBrandProfile = {
+    const newBrandProfile = {
     name: brandName.value.trim(),
     industry: brandIndustry.value.trim(),
     audience: brandAudience.value.trim(),
     voice: brandVoice.value.trim(),
     avoidWords: brandAvoidWords.value.trim(),
-    sampleEmail: brandSampleEmail.value.trim()
+    sampleEmail: brandSampleEmail.value.trim(),
+    email: brandEmail.value.trim()
   };
 
   const project = getActiveProject();
@@ -2381,6 +2383,7 @@ function applySettingsToForm() {
   brandVoice.value = bp.voice;
   brandAvoidWords.value = bp.avoidWords;
   brandSampleEmail.value = bp.sampleEmail;
+  brandEmail.value = bp.email || "";
 }
 
 // --------------------------------------------------------------
