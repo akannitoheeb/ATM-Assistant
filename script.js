@@ -1,12 +1,3 @@
-// ============================================================
-// Beeto — Stage 4 (guest mode + accounts) + hands-free voice mode
-//
-// Chat is visible immediately, even before logging in. Guests get
-// 1 free message per day (tracked by IP, on the server). Once
-// that's used, the login/signup modal opens automatically. Logged
-// in, chats/settings sync to Supabase as before.
-// ============================================================
-
 // --------------------------------------------------------------
 // Icon set — clean stroke SVGs (feather-icon style), replacing
 // emoji everywhere in the UI. Each is a bare <svg> string; callers
@@ -33,6 +24,15 @@ const ICONS = {
   activity: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
   send: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
 };
+
+// ============================================================
+// Beeto — Stage 4 (guest mode + accounts) + hands-free voice mode
+//
+// Chat is visible immediately, even before logging in. Guests get
+// 1 free message per day (tracked by IP, on the server). Once
+// that's used, the login/signup modal opens automatically. Logged
+// in, chats/settings sync to Supabase as before.
+// ============================================================
 
 const CHAT_API_URL = "/api/chat";
 const TTS_API_URL = "/api/tts";
@@ -1704,6 +1704,17 @@ forgotPasswordBtn?.addEventListener("click", async () => {
     authError.classList.remove("hidden");
     authError.style.color = "#7DB88A";
   }
+});
+
+const mailchimpAuthBtn = document.getElementById("mailchimpAuthBtn");
+const klaviyoAuthBtn = document.getElementById("klaviyoAuthBtn");
+
+mailchimpAuthBtn.addEventListener("click", () => {
+  window.location.href = "/api/oauth-start?provider=mailchimp&mode=login";
+});
+
+klaviyoAuthBtn.addEventListener("click", () => {
+  window.location.href = "/api/oauth-start?provider=klaviyo&mode=login";
 });
 
 // --------------------------------------------------------------
