@@ -1,32 +1,79 @@
 <!DOCTYPE html>
-<html><body>
+<html><body style="background:#131A26;color:#EDEAE0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+<div id="statusMsg">Finishing up…</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
   const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvdXZjdnJuc2VnemVjcWRrb2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDAxOTEsImV4cCI6MjEwMjMxNjE5MX0.fnkm94U5c-gbdDMrBvVoZ4ewyEUcOlRY7TJkqkEQS1Q";
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const statusMsg = document.getElementById("statusMsg");
 
   (async () => {
-    const hash = window.location.hash.slice(1); // strip leading #
+    const hash = window.location.hash.slice(1);
     const params = new URLSearchParams(hash);
+
+    if (params.get("error") === "no_email") {
+      statusMsg.textContent = "Couldn't read an email from that account. Try logging in a different way.";
+      return;
+    }
+
     const data = JSON.parse(atob(params.get("data").replace(/-/g, "+").replace(/_/g, "/")));
 
+    if (data.mode === "login") {
+      if (data.needs_confirm) {
+        const ok = confirm(`Log in as ${data.email}? This is the sender email on your ${data.provider} account.`);
+        if (!ok) {
+          statusMsg.textContent = "Login cancelled.";
+          return;
+        }
+      }
+
+      const { error } = await supabaseClient.auth.verifyOtp({
+        token_hash: data.token_hash,
+        type: "magiclink"
+      });
+
+      if (error) {
+        statusMsg.textContent = "Login failed: " + error.message;
+        return;
+      }
+
+      // Save the connection too, since we already have the token —
+      // one click gets both an account and a working integration.
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) {
+        await fetch("/api/save-integration", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({
+            provider: data.provider,
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+            expires_at: data.expires_at,
+            provider_account_id: data.provider_account_id
+          })
+        });
+      }
+
+      statusMsg.textContent = "Logged in! Redirecting…";
+      window.location.href = "/";
+      return;
+    }
+
+    // connect mode
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session) {
-      document.body.textContent = "Please log in to Beeto first, then try connecting again.";
+      statusMsg.textContent = "Please log in to Beeto first, then try connecting again.";
       return;
     }
 
     const res = await fetch("/api/save-integration", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify(data)
     });
 
-    document.body.textContent = res.ok
+    statusMsg.textContent = res.ok
       ? "Connected! You can close this tab and go back to Beeto."
       : "Something went wrong saving the connection.";
   })();
